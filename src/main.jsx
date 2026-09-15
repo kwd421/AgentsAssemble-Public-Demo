@@ -1,17 +1,34 @@
 import React, { useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import "./styles.css";
+import {
+  AtSign,
+  Bell,
+  Bot,
+  ChevronDown,
+  Hash,
+  Home,
+  Paperclip,
+  Pin,
+  Plus,
+  Search,
+  Send,
+  Settings,
+  Smile,
+  Sparkles,
+  Users,
+} from "lucide-react";
+import "./index.css";
 
 const AGENTS = [
-  { id: "strategist", name: "전략가", short: "S", label: "Strategy", detail: "목표 · 우선순위 · 구조" },
-  { id: "engineer", name: "엔지니어", short: "E", label: "Engineering", detail: "구현 · 비용 · 기술 리스크" },
-  { id: "critic", name: "비평가", short: "C", label: "Critical review", detail: "허점 · 실패 조건 · 검증" }
+  { id: "strategist", name: "전략가", provider: "Strategy", role: "목표 · 우선순위 · 구조", initial: "S" },
+  { id: "engineer", name: "엔지니어", provider: "Engineering", role: "구현 · 비용 · 기술 리스크", initial: "E" },
+  { id: "critic", name: "비평가", provider: "Critical Review", role: "허점 · 검증 · 실패 조건", initial: "C" },
 ];
 
 const SUGGESTIONS = [
-  { title: "게임 기획 검토", text: "1인 개발자가 3개월 안에 만들 게임 아이디어를 평가해줘." },
-  { title: "창업 아이디어 검증", text: "AI 모션캡처 SaaS를 창업한다면 MVP와 가장 큰 리스크를 정리해줘." },
-  { title: "서비스 필요성 토론", text: "이 서비스가 실제 사용자에게 왜 필요한지 서로 반박하면서 검토해줘." }
+  "1인 개발자가 3개월 안에 만들 게임 아이디어를 평가해줘.",
+  "AI 모션캡처 SaaS를 창업한다면 MVP와 가장 큰 리스크를 정리해줘.",
+  "이 서비스가 실제 사용자에게 왜 필요한지 서로 반박하면서 검토해줘.",
 ];
 
 function agentFor(id) {
@@ -38,9 +55,61 @@ function parseSseChunk(buffer, onEvent) {
   return tail;
 }
 
-function AgentAvatar({ id, size = "md" }) {
-  const agent = agentFor(id);
-  return <div className={`agent-avatar avatar-${id} avatar-${size}`}>{agent?.short || "A"}</div>;
+function Avatar({ label, agentId, human = false }) {
+  return (
+    <span
+      className={`dc-message-avatar mt-0.5 ${human ? "" : "agent"}`}
+      style={human ? { background: "#5865f2", color: "white", display: "grid", placeItems: "center", fontWeight: 900 } : undefined}
+      aria-hidden="true"
+    >
+      {human ? label : <span className="grid h-full w-full place-items-center text-[12px] font-black">{agentFor(agentId)?.initial || <Bot size={16} />}</span>}
+    </span>
+  );
+}
+
+function MessageRow({ message }) {
+  const isAgent = message.kind === "agent";
+  const agent = isAgent ? agentFor(message.agentId) : null;
+  const when = message.createdAt ? new Date(message.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "";
+  return (
+    <div className="dc-message grid grid-cols-[40px_minmax(0,1fr)] gap-3 px-4 py-1.5" tabIndex={0}>
+      <Avatar label="나" agentId={message.agentId} human={!isAgent} />
+      <div className="min-w-0">
+        <p className="flex items-baseline gap-2">
+          <span className="dc-message-author truncate text-[15px] font-semibold text-text-primary preserve-words">
+            {isAgent ? message.agentName || agent?.name : "나"}
+          </span>
+          {isAgent && (
+            <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-accent">
+              {message.agentLabel || agent?.provider}
+            </span>
+          )}
+          <span className="shrink-0 text-[11px] text-text-muted">{when}</span>
+        </p>
+        <div className="text-[14px] leading-relaxed text-text-secondary preserve-words whitespace-pre-wrap">
+          {message.content}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TypingRow({ agentId }) {
+  const agent = agentFor(agentId);
+  return (
+    <div className="dc-message grid grid-cols-[40px_minmax(0,1fr)] gap-3 px-4 py-1.5">
+      <Avatar agentId={agentId} />
+      <div className="min-w-0">
+        <p className="flex items-baseline gap-2">
+          <span className="dc-message-author truncate text-[15px] font-semibold text-text-primary">{agent?.name}</span>
+        </p>
+        <div className="flex items-center gap-2 text-[13px] text-text-muted" aria-live="polite">
+          <span className="dc-typing-dots" aria-hidden="true"><span /><span /><span /></span>
+          <span>입력중...</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function App() {
@@ -49,13 +118,11 @@ function App() {
   const [input, setInput] = useState("");
   const [target, setTarget] = useState("");
   const [thinking, setThinking] = useState([]);
+  const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [turns, setTurns] = useState({ used: 0, max: 8 });
-  const [busy, setBusy] = useState(false);
   const feedRef = useRef(null);
-
-  const targetName = useMemo(() => agentFor(target)?.name || "모든 Agent", [target]);
-  const sessionProgress = Math.min(100, (turns.used / turns.max) * 100);
+  const targetName = useMemo(() => agentFor(target)?.name || "AI 팀 전체", [target]);
 
   function scrollFeed() {
     requestAnimationFrame(() => {
@@ -75,20 +142,18 @@ function App() {
   }
 
   async function runTurn(textOverride) {
-    const content = (textOverride ?? input).trim();
+    const content = String(textOverride ?? input).trim();
     if (!content || busy || turns.used >= turns.max) return;
-
     setBusy(true);
     setStatus("");
     setInput("");
-
     try {
       const id = await ensureRoom();
       const optimistic = {
         id: `local-${Date.now()}`,
         kind: "user",
         content,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
       };
       setMessages((current) => [...current, optimistic]);
       scrollFeed();
@@ -96,37 +161,36 @@ function App() {
       const response = await fetch(`/api/rooms/${encodeURIComponent(id)}/turns/stream`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content, targetAgentId: target || undefined })
+        body: JSON.stringify({ content, targetAgentId: target || undefined }),
       });
 
       if (!response.ok || !response.body) {
         const failure = await response.json().catch(() => ({}));
         if (failure.error === "turn_limit_reached") throw new Error("공개 데모의 최대 대화 횟수에 도달했습니다.");
-        if (failure.error === "rate_limited") throw new Error("요청이 잠시 많습니다. 잠시 뒤 다시 시도해 주세요.");
+        if (failure.error === "rate_limited") throw new Error("잠시 요청이 많습니다. 잠시 뒤 다시 시도해 주세요.");
         throw new Error("AI 팀을 호출하지 못했습니다.");
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-
       const handle = (event, data) => {
         if (event === "accepted") {
           setTurns({ used: data.userTurns, max: data.maxUserTurns });
           if (data.userMessage?.id) {
-            setMessages((current) => current.map((message) => message.id === optimistic.id ? { ...data.userMessage } : message));
+            setMessages((current) => current.map((message) => message.id === optimistic.id ? data.userMessage : message));
           }
         }
         if (event === "agent_start") {
           setThinking((current) => current.includes(data.agentId) ? current : [...current, data.agentId]);
         }
         if (event === "agent") {
-          setThinking((current) => current.filter((id) => id !== data.agentId));
+          setThinking((current) => current.filter((idValue) => idValue !== data.agentId));
           setMessages((current) => [...current, data]);
           scrollFeed();
         }
         if (event === "agent_error") {
-          setThinking((current) => current.filter((id) => id !== data.agentId));
+          setThinking((current) => current.filter((idValue) => idValue !== data.agentId));
           setStatus(`${agentFor(data.agentId)?.name || "에이전트"} 응답을 가져오지 못했습니다.`);
         }
         if (event === "fatal") setStatus(data.message || "응답 연결이 종료되었습니다.");
@@ -146,193 +210,244 @@ function App() {
     }
   }
 
-  function newRoom() {
+  function resetRoom() {
     if (busy) return;
     setRoomId("");
     setMessages([]);
-    setTurns({ used: 0, max: 8 });
-    setStatus("");
-    setTarget("");
     setInput("");
+    setTarget("");
+    setThinking([]);
+    setStatus("");
+    setTurns({ used: 0, max: 8 });
+  }
+
+  function handleComposerKeyDown(event) {
+    if (event.key !== "Enter" || event.nativeEvent.isComposing || event.shiftKey) return;
+    event.preventDefault();
+    void runTurn();
   }
 
   return (
-    <div className="workspace">
-      <header className="appbar">
-        <div className="appbar-left">
-          <div className="logo">A</div>
-          <div className="brand-block">
-            <strong>AgentsAssemble</strong>
-            <span>Public demo</span>
-          </div>
-          <div className="breadcrumb"><span>/</span><strong># council</strong></div>
+    <div className="dc-shell flex h-screen max-h-screen overflow-hidden text-text-primary">
+      <nav className="dc-rail flex shrink-0 flex-col items-center gap-2 py-3" aria-label="방 목록">
+        <button type="button" className="dc-rail-home" data-active="true" aria-label="AgentsAssemble 홈">
+          <Home size={22} />
+        </button>
+        <div className="dc-server-divider" />
+        <div className="dc-room-stack">
+          <button type="button" className="dc-server-btn" data-active="true" aria-label="Wanted Demo Room">
+            <span className="text-[12px] font-black">AA</span>
+          </button>
+          <button type="button" className="dc-server-btn dc-server-add" aria-label="공개 데모 안내" title="공개 데모에서는 방 추가를 제한합니다.">
+            <Plus size={20} />
+          </button>
         </div>
-        <div className="appbar-right">
-          <span className="live-pill"><i /> LIVE DEMO</span>
-          <span className="turn-badge">{turns.used}/{turns.max} turns</span>
-          <button className="new-room-button" onClick={newRoom} disabled={busy}>새 체험방</button>
-        </div>
-      </header>
+      </nav>
 
-      <div className="workspace-grid">
-        <aside className="left-rail">
-          <div className="rail-section">
-            <div className="rail-label">ROOM</div>
-            <button className="channel active"><span>#</span><strong>council</strong><i /></button>
+      <aside className="dc-sidebar flex shrink-0 flex-col" aria-label="채널 목록">
+        <header className="dc-sidebar-head shrink-0" data-tone="violet">
+          <button type="button" className="dc-server-header-button" onClick={resetRoom} title="새 임시 체험방 시작">
+            <span className="truncate preserve-words">AgentsAssemble Demo</span>
+            <ChevronDown size={16} />
+          </button>
+          <div className="dc-sidebar-banner">
+            <span className="dc-sidebar-server-icon">AA</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-black uppercase tracking-wide text-white/70">Room</p>
+              <p className="truncate text-[12px] font-semibold text-text-muted preserve-words">Wanted AI Championship 2026 공개 체험방</p>
+            </div>
+            <span className="demo-public-pill">Public</span>
           </div>
+        </header>
 
-          <div className="rail-section rail-agents">
-            <div className="rail-label-row"><span>AGENTS</span><small>3 online</small></div>
+        <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-3 chat-scroll" aria-label="채널">
+          <section className="dc-channel-section">
+            <div className="flex items-center justify-between">
+              <button type="button" className="dc-channel-category dc-channel-category-button" aria-expanded="true">
+                <ChevronDown size={12} /> TEXT CHANNELS
+              </button>
+            </div>
+            <button type="button" data-active="true" className="dc-channel">
+              <Hash size={18} className="shrink-0 opacity-70" />
+              <span className="truncate">general</span>
+            </button>
+          </section>
+
+          <section className="dc-channel-section mt-5">
+            <button type="button" className="dc-channel-category dc-channel-category-button" aria-expanded="true">
+              <ChevronDown size={12} /> AI AGENTS
+            </button>
+            <button type="button" className="dc-channel" data-active={!target} onClick={() => setTarget("")}>
+              <Users size={18} className="shrink-0 opacity-70" />
+              <span className="truncate">AI 팀 전체</span>
+            </button>
             {AGENTS.map((agent) => (
               <button
                 key={agent.id}
-                className={`agent-row ${target === agent.id ? "selected" : ""}`}
+                type="button"
+                className="dc-channel"
+                data-active={target === agent.id}
                 onClick={() => setTarget(target === agent.id ? "" : agent.id)}
-                title={`${agent.name}에게만 후속 질문`}
               >
-                <AgentAvatar id={agent.id} size="sm" />
-                <span className="agent-copy"><strong>{agent.name}</strong><small>{agent.label}</small></span>
-                <i className="presence-dot" />
+                <Bot size={18} className="shrink-0 opacity-70" />
+                <span className="truncate">{agent.name}</span>
               </button>
             ))}
-          </div>
+          </section>
+        </nav>
 
-          <div className="rail-footer">
-            <div className="ephemeral-card">
-              <div className="ephemeral-icon">◎</div>
-              <div><strong>Ephemeral room</strong><p>기록은 서버 메모리에만 유지됩니다.</p></div>
+        <footer className="dc-user-area shrink-0" style={{ zIndex: 30 }}>
+          <div className="flex items-center gap-2 px-2 py-2">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent text-[11px] font-black text-white">YOU</span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[12px] font-bold text-text-primary">Public Visitor</p>
+              <p className="truncate text-[10px] text-text-muted">{turns.used}/{turns.max} turns · memory-only</p>
             </div>
+            <button type="button" className="dc-head-icon" aria-label="데모 설정 안내" title="공개 데모에서는 설정이 제한됩니다."><Settings size={16} /></button>
           </div>
-        </aside>
+        </footer>
+      </aside>
 
-        <main className="chat-column">
-          <header className="chat-header">
-            <div>
-              <div className="channel-title"><span>#</span><strong>council</strong><span className="channel-status">3 agents online</span></div>
-              <p>하나의 대화 문맥을 세 Agent가 순서대로 공유합니다.</p>
-            </div>
-            <div className="shared-context-pill"><span className="stack-icon">≡</span> Shared context</div>
-          </header>
+      <main className="dc-chat flex min-w-0 flex-1 flex-col" aria-label="채널 내용">
+        <header className="dc-chat-head flex h-12 shrink-0 items-center gap-2 px-3 lg:px-4" data-members-available="true" data-members-open="true">
+          <span className="dc-desktop-head-channel-icon shrink-0 text-text-muted"><Hash size={20} /></span>
+          <h1 className="dc-desktop-head-title shrink-0 text-[15px] font-bold text-text-primary preserve-words">general</h1>
+          <span className="hidden h-4 w-px bg-line sm:block" aria-hidden />
+          <p className="hidden min-w-0 truncate text-[13px] text-text-muted preserve-words sm:block">사람과 에이전트가 함께 보는 기본 채널</p>
+          <div className="dc-head-actions ml-auto flex shrink-0 items-center gap-1.5">
+            <span className="demo-target-chip"><Sparkles size={13} /> {targetName}</span>
+            <button type="button" className="dc-head-icon" aria-label="알림"><Bell size={17} /></button>
+            <button type="button" className="dc-head-icon" aria-label="고정 메시지"><Pin size={17} /></button>
+            <button type="button" className="dc-head-icon text-text-primary" aria-label="멤버 목록"><Users size={18} /></button>
+            <label className="dc-head-search hidden md:flex">
+              <span className="sr-only">general 검색</span>
+              <input type="search" placeholder="general 검색" readOnly />
+              <Search size={14} aria-hidden />
+            </label>
+          </div>
+        </header>
 
-          <div className="feed" ref={feedRef}>
-            {messages.length === 0 ? (
-              <section className="empty-state">
-                <div className="empty-kicker"><i /> READY</div>
-                <h1>한 번 묻고,<br />세 관점으로 검토하세요.</h1>
-                <p>전략가가 구조를 잡고, 엔지니어가 구현 가능성을 검토하고, 비평가가 앞선 의견의 허점을 찾습니다.</p>
-                <div className="flow-row">
-                  {AGENTS.map((agent, index) => (
-                    <React.Fragment key={agent.id}>
-                      <div className="flow-agent"><AgentAvatar id={agent.id} /><div><strong>{agent.name}</strong><span>{agent.detail}</span></div></div>
-                      {index < AGENTS.length - 1 && <div className="flow-arrow">→</div>}
-                    </React.Fragment>
+        {status && (
+          <div className="mx-4 mt-3 rounded border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] font-semibold text-danger preserve-words" role="alert">
+            {status}
+          </div>
+        )}
+
+        <div ref={feedRef} className="relative min-h-0 flex-1 overflow-y-auto py-4 chat-scroll" style={{ overflowAnchor: "none" }}>
+          <section className="dc-channel-intro px-4 pb-5 pt-2">
+            <span className="dc-channel-intro-icon"><Hash size={26} /></span>
+            <h2 className="mt-3 text-[28px] font-black leading-tight text-text-primary preserve-words">AgentsAssemble Demo</h2>
+            <p className="mt-1 max-w-2xl text-[14px] leading-relaxed text-text-muted preserve-words">
+              하나의 Room 기록을 사람과 여러 AI가 함께 읽습니다. 전체 팀 또는 특정 에이전트에게 질문해 보세요.
+            </p>
+          </section>
+
+          {messages.length === 0 && (
+            <>
+              <div className="demo-empty-hint">
+                이 공개판은 원본 AgentsAssemble의 room UI를 사용합니다. 로컬 CLI·OAuth·MCP 대신 서버측 AI API만 연결한 제한된 체험판입니다.
+              </div>
+              <div className="px-4 pt-4">
+                <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-text-muted">빠른 시작</p>
+                <div className="flex flex-wrap gap-2">
+                  {SUGGESTIONS.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      className="rounded-md border border-line bg-panel-soft px-3 py-2 text-left text-[12px] font-semibold text-text-secondary hover:bg-sidebar-hover hover:text-text-primary"
+                      onClick={() => void runTurn(suggestion)}
+                      disabled={busy}
+                    >
+                      {suggestion}
+                    </button>
                   ))}
                 </div>
-                <div className="prompt-grid">
-                  {SUGGESTIONS.map((item) => (
-                    <button key={item.title} onClick={() => runTurn(item.text)} disabled={busy}>
-                      <span>{item.title}</span>
-                      <p>{item.text}</p>
-                      <i>↗</i>
+              </div>
+            </>
+          )}
+
+          {messages.map((message) => <MessageRow key={message.id} message={message} />)}
+          {thinking.map((agentId) => <TypingRow key={`typing-${agentId}`} agentId={agentId} />)}
+        </div>
+
+        <div className="shrink-0 px-4 pb-5">
+          <section className="dc-composer-shell">
+            <div className="dc-composer-bar">
+              <textarea
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={handleComposerKeyDown}
+                className="dc-composer-input"
+                placeholder={turns.used >= turns.max ? "공개 데모의 최대 대화 횟수에 도달했습니다." : `#general에 메시지 보내기 · ${targetName}`}
+                disabled={busy || turns.used >= turns.max}
+                aria-label="채팅 입력"
+                rows={1}
+              />
+              <button type="button" className="dc-composer-button" data-role="attachment" aria-label="첨부 추가" title="공개 데모에서는 첨부를 제한합니다."><Paperclip size={17} /></button>
+              <button type="button" className="dc-composer-button" data-accessory="apps" aria-label="앱"><Sparkles size={17} /></button>
+              <button type="button" className="dc-composer-button" data-role="mention" aria-label="멘션" onClick={() => setInput((value) => `${value}@`)}><AtSign size={17} /></button>
+              <button type="button" className="dc-composer-button" data-role="emoji" aria-label="이모지" onClick={() => setInput((value) => `${value}🙂`)}><Smile size={17} /></button>
+              <button
+                type="button"
+                className="dc-composer-button send"
+                data-role="send"
+                aria-label="채팅 메시지 보내기"
+                disabled={busy || !input.trim() || turns.used >= turns.max}
+                onClick={() => void runTurn()}
+              >
+                <Send size={17} />
+              </button>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <aside className="dc-members demo-right-panel hidden shrink-0 xl:flex xl:flex-col" aria-label="방 연결 정보" data-testid="room-right-panel">
+        <div className="dc-right-panel-header-spacer" />
+        <div className="dc-right-panel-tabs" role="tablist" aria-label="우측 패널">
+          <button type="button" role="tab" data-active="true" aria-selected="true">멤버</button>
+        </div>
+        <section className="min-h-0 flex-1">
+          <div className="dc-room-connection-panel flex h-full min-h-0 flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3 chat-scroll">
+              <p className="mb-2 px-2 text-[11px] font-black uppercase tracking-wide text-text-muted">온라인 — 4</p>
+              <section className="dc-person-member-group">
+                <button type="button" className="demo-member-button flex w-full items-center gap-2 rounded px-2 py-2 text-left hover:bg-sidebar-hover">
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-accent text-[10px] font-black text-white">YOU</span>
+                  <span className="min-w-0"><strong className="block truncate text-[12px] text-text-primary">Public Visitor</strong><small className="block truncate text-[10px] text-text-muted">human · online</small></span>
+                </button>
+              </section>
+              <section className="dc-person-member-group mt-3">
+                <p className="dc-person-owner-label preserve-words">AI Agents</p>
+                <div className="dc-owner-agent-list">
+                  {AGENTS.map((agent) => (
+                    <button
+                      type="button"
+                      key={agent.id}
+                      className="demo-member-button flex w-full items-center gap-2 rounded px-2 py-2 text-left hover:bg-sidebar-hover"
+                      data-selected={target === agent.id}
+                      onClick={() => setTarget(target === agent.id ? "" : agent.id)}
+                    >
+                      <span className="grid h-8 w-8 place-items-center rounded-full bg-panel-soft text-[11px] font-black text-text-secondary">{agent.initial}</span>
+                      <span className="min-w-0 flex-1"><strong className="block truncate text-[12px] text-text-primary">{agent.name}</strong><small className="block truncate text-[10px] text-text-muted">{agent.role}</small></span>
+                      <span className="h-2 w-2 rounded-full bg-online" aria-label="온라인" />
                     </button>
                   ))}
                 </div>
               </section>
-            ) : (
-              <div className="message-list">
-                <div className="conversation-start"><span>오늘</span></div>
-                {messages.map((message) => (
-                  <article className={`message-row ${message.kind}`} key={message.id}>
-                    {message.kind === "agent" ? <AgentAvatar id={message.agentId} /> : <div className="user-avatar">YOU</div>}
-                    <div className="message-content">
-                      <div className="message-head">
-                        <strong>{message.kind === "agent" ? message.agentName : "나"}</strong>
-                        {message.kind === "agent" && <span className="role-chip">{message.agentLabel}</span>}
-                      </div>
-                      <p>{message.content}</p>
-                    </div>
-                  </article>
-                ))}
-                {thinking.map((id) => (
-                  <article className="message-row thinking-row" key={`thinking-${id}`}>
-                    <AgentAvatar id={id} />
-                    <div className="message-content">
-                      <div className="message-head"><strong>{agentFor(id)?.name}</strong><span className="role-chip">thinking</span></div>
-                      <div className="typing"><i /><i /><i /></div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="composer-zone">
-            {status && <div className="status-banner"><span>!</span>{status}</div>}
-            <div className="target-row">
-              <span>Reply with</span>
-              <button className={!target ? "target-button active" : "target-button"} onClick={() => setTarget("")}>모든 Agent</button>
-              {AGENTS.map((agent) => <button key={agent.id} className={target === agent.id ? `target-button active target-${agent.id}` : `target-button target-${agent.id}`} onClick={() => setTarget(agent.id)}>{agent.name}</button>)}
-            </div>
-            <div className="composer-card">
-              <textarea
-                value={input}
-                maxLength={2500}
-                placeholder={`${targetName}에게 메시지를 보내세요…`}
-                disabled={busy || turns.used >= turns.max}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") runTurn();
-                }}
-              />
-              <div className="composer-footer">
-                <div className="composer-meta"><span>공유 문맥</span><i /> <span>{target ? `${targetName} 단독 응답` : "3 agents sequential"}</span></div>
-                <button className="send-button" onClick={() => runTurn()} disabled={busy || !input.trim() || turns.used >= turns.max}>
-                  {busy ? <span className="send-loading"><i /><i /><i /></span> : <>보내기 <kbd>⌘↵</kbd></>}
-                </button>
-              </div>
-            </div>
-            <p className="privacy-line">공개 데모 · 세션은 일정 시간이 지나면 사라집니다 · 민감한 정보를 입력하지 마세요.</p>
-          </div>
-        </main>
-
-        <aside className="inspector">
-          <section className="inspector-section">
-            <div className="inspector-label">HOW IT WORKS</div>
-            <h3>하나의 Room,<br />하나의 공유 문맥.</h3>
-            <p className="inspector-copy">세 Agent가 독립 역할을 유지하면서 같은 대화 기록을 읽습니다.</p>
-            <div className="context-chain">
-              {AGENTS.map((agent, index) => (
-                <div className="context-step" key={agent.id}>
-                  <span className="step-number">0{index + 1}</span>
-                  <AgentAvatar id={agent.id} size="xs" />
-                  <div><strong>{agent.name}</strong><p>{agent.detail}</p></div>
+              <details className="dc-member-context mt-4 px-2" open>
+                <summary className="cursor-pointer list-none text-[11px] font-bold text-text-muted hover:text-text-secondary">공개 데모 범위</summary>
+                <div className="mt-2 space-y-2 text-[11px] leading-relaxed text-text-muted">
+                  <p>Shared room transcript</p>
+                  <p>서버측 AI API</p>
+                  <p>로컬 CLI / OAuth / MCP 제외</p>
+                  <p>45분 memory-only room</p>
                 </div>
-              ))}
+              </details>
             </div>
-          </section>
-
-          <section className="inspector-section session-card">
-            <div className="inspector-label-row"><span>SESSION</span><strong>{turns.used}/{turns.max}</strong></div>
-            <div className="session-progress"><i style={{ width: `${sessionProgress}%` }} /></div>
-            <div className="session-stats"><span><i className="green-dot" />3 agents</span><span>45 min expiry</span></div>
-          </section>
-
-          <section className="inspector-section compact-section">
-            <div className="inspector-label">PUBLIC DEMO</div>
-            <ul>
-              <li><span>✓</span> 로그인 없음</li>
-              <li><span>✓</span> 서버측 API key</li>
-              <li><span>✓</span> shared transcript</li>
-              <li><span>✓</span> Agent 개별 후속 질문</li>
-            </ul>
-          </section>
-
-          <div className="competition-note">
-            <span>WANTED AI Championship 2026</span>
-            <p>실제품의 로컬 CLI·MCP·OAuth 기능은 공개 심사 환경에서 의도적으로 제외했습니다.</p>
           </div>
-        </aside>
-      </div>
+        </section>
+      </aside>
     </div>
   );
 }

@@ -1,1 +1,0 @@
-Original UI migration in progress. Source UI is pinned to kwd421/agentsassemble-rust@2135d5112d00f80996a5f6ce98762515049cfcb8. This note will be replaced when the migration commit lands.
