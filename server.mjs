@@ -1,270 +1,155 @@
-import express from "express";
-import crypto from "node:crypto";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import express from 'express';
+import { createServer } from 'node:http';
+import { WebSocketServer, WebSocket } from 'ws';
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { AGENTS, modelFor } from './lib/agents.mjs';
+import { aiConfig } from './lib/ai.mjs';
+import { RoomStore } from './lib/rooms.mjs';
 
-const app = express();
-app.disable("x-powered-by");
-app.set("trust proxy", 1);
-app.use(express.json({ limit: "16kb" }));
-
-const PORT = Number(process.env.PORT || 3000);
-const ROOM_TTL_MS = 45 * 60 * 1000;
-const MAX_ROOMS = 200;
-const MAX_USER_TURNS = 8;
-const MAX_INPUT_CHARS = 2500;
-const MAX_TRANSCRIPT_CHARS = 24_000;
-const RATE_WINDOW_MS = 60_000;
-const RATE_MAX = 24;
-const AI_TIMEOUT_MS = clampNumber(process.env.AI_TIMEOUT_MS, 5_000, 60_000, 30_000);
-const AI_MAX_TOKENS = clampNumber(process.env.AI_MAX_TOKENS, 128, 1200, 500);
-
-const rooms = new Map();
-const rate = new Map();
-
-const AGENTS = [
-  {
-    id: "strategist",
-    name: "전략가",
-    label: "Strategy",
-    modelEnv: "AI_MODEL_STRATEGIST",
-    prompt:
-      "당신은 전략가입니다. 목표를 구조화하고 우선순위를 정하며, 모호한 전제를 짚습니다. " +
-      "한국어로 3~6문장 정도로 간결하게 답하세요. 다른 에이전트의 발언이 있다면 필요한 부분을 직접 이어받거나 반박하세요."
-  },
-  {
-    id: "engineer",
-    name: "엔지니어",
-    label: "Engineering",
-    modelEnv: "AI_MODEL_ENGINEER",
-    prompt:
-      "당신은 시니어 소프트웨어 엔지니어입니다. 구현 가능성, 기술 선택, 비용과 리스크를 구체적으로 평가합니다. " +
-      "한국어로 3~6문장 정도로 간결하게 답하세요. 전략가나 다른 에이전트의 발언을 같은 공유 문맥으로 보고 필요한 부분을 이어받으세요."
-  },
-  {
-    id: "critic",
-    name: "비평가",
-    label: "Critical Review",
-    modelEnv: "AI_MODEL_CRITIC",
-    prompt:
-      "당신은 비평가입니다. 앞선 의견의 허점, 과도한 범위, 실패 조건과 검증 방법을 찾습니다. " +
-      "무조건 부정하지 말고 가장 큰 위험과 개선안을 한국어 3~6문장으로 제시하세요. 다른 에이전트의 발언을 명시적으로 검토할 수 있습니다."
+export function createDemoServer({ env = process.env, runner } = {}) {
+  const config = aiConfig(env);
+  const store = new RoomStore({ env, runner });
+  const app = express();
+  const server = createServer(app);
+  const rates = new Map();
+  const connections = new Map();
+  const configuredOrigin = env.APP_PUBLIC_URL ? new URL(env.APP_PUBLIC_URL).origin : null;
+  app.disable('x-powered-by'); app.set('trust proxy', 1);
+  function ip(req) { return req.ip || String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',').at(-1).trim(); }
+  function limited(req) {
+    const key = ip(req), now = Date.now();
+    let entry = rates.get(key);
+    if (!entry || now - entry.started >= 60000) {
+      if (!entry && rates.size >= 5000) return true;
+      rates.set(key, entry = { started: now, count: 0 });
+    }
+    return ++entry.count > 24;
   }
-];
-
-function clampNumber(value, min, max, fallback) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, parsed));
-}
-function now() { return Date.now(); }
-function requestIp(req) { return String(req.ip || req.socket.remoteAddress || "unknown"); }
-function prune() {
-  const cutoff = now() - ROOM_TTL_MS;
-  for (const [id, room] of rooms) if (room.updatedAt < cutoff) rooms.delete(id);
-  if (rooms.size <= MAX_ROOMS) return;
-  const ordered = [...rooms.values()].sort((a, b) => a.updatedAt - b.updatedAt);
-  for (const room of ordered.slice(0, rooms.size - MAX_ROOMS)) rooms.delete(room.id);
-}
-function rateLimited(req) {
-  const key = requestIp(req);
-  const stamp = now();
-  const current = rate.get(key);
-  if (!current || stamp - current.startedAt >= RATE_WINDOW_MS) {
-    rate.set(key, { startedAt: stamp, count: 1 });
-    return false;
+  function sameOrigin(req) {
+    if (!req.headers.origin) return true;
+    try {
+      const origin = new URL(req.headers.origin);
+      return origin.origin === (configuredOrigin || `${env.NODE_ENV === 'production' ? 'https' : 'http'}://${req.headers.host}`);
+    } catch { return false; }
   }
-  current.count += 1;
-  return current.count > RATE_MAX;
-}
-function createRoom() {
-  prune();
-  const id = crypto.randomBytes(12).toString("base64url");
-  const room = { id, createdAt: now(), updatedAt: now(), userTurns: 0, busy: false, messages: [] };
-  rooms.set(id, room);
-  return room;
-}
-function publicRoom(room) {
-  return {
-    id: room.id,
-    createdAt: room.createdAt,
-    updatedAt: room.updatedAt,
-    userTurns: room.userTurns,
-    maxUserTurns: MAX_USER_TURNS,
-    agents: AGENTS.map(({ id, name, label }) => ({ id, name, label })),
-    messages: room.messages
-  };
-}
-function cleanInput(value) {
-  if (typeof value !== "string") return "";
-  const clean = value.trim();
-  if (!clean || clean.length > MAX_INPUT_CHARS) return "";
-  return clean;
-}
-function transcript(room) {
-  const rows = room.messages.map((message) => {
-    if (message.kind === "user") return `사용자: ${message.content}`;
-    if (message.kind === "agent") return `${message.agentName}: ${message.content}`;
-    return "";
+  app.use((req, res, next) => {
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    if (req.path.startsWith('/api/')) {
+      res.setHeader('Cache-Control', 'no-store');
+      if (!sameOrigin(req)) return res.status(403).json({ error: 'origin_not_allowed' });
+      if (req.path !== '/api/health' && limited(req)) return res.status(429).json({ error: 'rate_limited' });
+    }
+    next();
   });
-  let joined = rows.filter(Boolean).join("\n\n");
-  if (joined.length > MAX_TRANSCRIPT_CHARS) joined = joined.slice(joined.length - MAX_TRANSCRIPT_CHARS);
-  return joined;
-}
-function selectedAgents(targetAgentId) {
-  if (!targetAgentId) return AGENTS;
-  const one = AGENTS.find((agent) => agent.id === targetAgentId);
-  return one ? [one] : [];
-}
-function modelFor(agent) {
-  return (process.env[agent.modelEnv] || process.env.AI_MODEL || "").trim();
-}
-function fakeResponse(agent, userText) {
-  const topic = userText.length > 120 ? `${userText.slice(0, 117)}...` : userText;
-  return {
-    strategist: `“${topic}”를 목표·사용자·제약으로 나눠 먼저 정의하는 게 좋습니다. 첫 데모에서는 핵심 가치가 바로 보이는 한 가지 흐름만 남기고, 부가 기능은 과감히 제외하세요. 성공 기준을 ‘처음 접속한 사용자가 짧은 시간 안에 결과를 이해하는가’로 두겠습니다.`,
-    engineer: "구현 관점에서는 기존 기능을 모두 옮기기보다 입력→공유 문맥→여러 에이전트 응답의 최소 경로를 독립 서비스로 만드는 편이 안전합니다. API 키는 서버에만 두고, 세션은 메모리에 제한하며, 턴 수와 입력 길이를 제한하면 공개 데모 비용도 통제할 수 있습니다.",
-    critic: "가장 큰 위험은 기능을 많이 보여주려다 첫 체험이 느려지는 것입니다. 모델 세 개를 매 턴 호출하면 지연과 비용이 커질 수 있으므로 짧은 응답 제한과 명확한 실패 표시가 필요합니다. 심사 환경에서는 로그인·설치·로컬 CLI 의존성이 없어야 합니다."
-  }[agent.id];
-}
-async function callAgent(agent, room, signal) {
-  if (process.env.DEMO_FAKE_MODE === "1") {
-    const lastUser = [...room.messages].reverse().find((m) => m.kind === "user")?.content || "";
-    return fakeResponse(agent, lastUser);
-  }
-  const apiKey = (process.env.AI_API_KEY || "").trim();
-  const model = modelFor(agent);
-  if (!apiKey || !model) {
-    const error = new Error("AI demo is not configured.");
-    error.code = "demo_not_configured";
-    throw error;
-  }
-  const base = (process.env.AI_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
-  const headers = { "content-type": "application/json", "authorization": `Bearer ${apiKey}` };
-  if (process.env.APP_PUBLIC_URL) headers["HTTP-Referer"] = process.env.APP_PUBLIC_URL;
-  if (process.env.APP_NAME) headers["X-Title"] = process.env.APP_NAME;
-  const combinedSignal = AbortSignal.any([signal, AbortSignal.timeout(AI_TIMEOUT_MS)]);
-  const response = await fetch(`${base}/chat/completions`, {
-    method: "POST",
-    headers,
-    signal: combinedSignal,
-    body: JSON.stringify({
-      model,
-      temperature: 0.55,
-      max_tokens: AI_MAX_TOKENS,
-      messages: [
-        {
-          role: "system",
-          content: `${agent.prompt}\n\n이 대화는 AgentsAssemble 공개 데모의 하나의 Room입니다. 모든 참가자는 아래 동일한 Room 기록을 공유합니다. 존재하지 않는 실행 결과나 도구 사용을 꾸며내지 마세요.`
-        },
-        { role: "user", content: `현재 Room 기록:\n\n${transcript(room)}\n\n당신 차례입니다.` }
-      ]
-    })
+  app.use(express.json({ limit: '16kb' }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, version: '0.3.0', configured: config.fake || AGENTS.every(a => Boolean(config.apiKey && modelFor(a, env))), fakeMode: config.fake, runtime: config.fake ? 'fixture' : 'cloud-api', rustConnected: false, searchEnabled: false, transport: 'websocket', maxTokens: config.maxTokens, timeoutMs: config.timeoutMs, retries: config.retries }));
+  app.post('/api/rooms', (_req, res) => res.status(201).json(store.snapshot(store.create())));
+  app.get('/api/rooms/:roomId', (req, res) => res.json(store.snapshot(store.get(req.params.roomId))));
+  app.post('/api/rooms/:roomId/cancel', (req, res) => { store.stop(store.get(req.params.roomId)); res.json({ ok: true }); });
+  // Compatibility for tabs that were open during the deployment. New UI only uses WebSocket.
+  app.post('/api/rooms/:roomId/turns/stream', async (req, res, next) => {
+    let release;
+    const send = ({ event, data }) => { if (!res.destroyed && !res.writableEnded) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); };
+    try {
+      const room = store.get(req.params.roomId);
+      const pending = [];
+      release = store.subscribe(room, p => pending.push(p));
+      const { completion } = store.start(room, { ...req.body, type: 'turn', requestId: req.body?.requestId || randomUUID() });
+      release();
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.flushHeaders();
+      for (const p of pending) send(p);
+      release = store.subscribe(room, send);
+      const heartbeat = setInterval(() => { if (!res.destroyed) res.write(': heartbeat\n\n'); }, 15000);
+      res.once('close', () => { clearInterval(heartbeat); release?.(); });
+      await completion;
+      clearInterval(heartbeat); release(); res.end();
+    } catch (e) { release?.(); if (!res.headersSent) next(e); else res.end(); }
   });
-  const text = await response.text();
-  if (!response.ok) {
-    const error = new Error(`AI upstream returned ${response.status}`);
-    error.code = "ai_upstream_error";
-    error.detail = text.slice(0, 300);
-    throw error;
+  app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
+  app.use((error, _req, res, _next) => res.status(error.status || 500).json({ error: error.code || (error.type === 'entity.too.large' ? 'invalid_message' : 'server_error') }));
+  const dist = path.join(path.dirname(fileURLToPath(import.meta.url)), 'dist');
+  app.use(express.static(dist, { index: false, maxAge: '1h' }));
+  app.get('/{*splat}', (_req, res) => { res.setHeader('Cache-Control', 'no-cache'); res.sendFile(path.join(dist, 'index.html')); });
+
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024, perMessageDeflate: false });
+  function send(ws, event, data, seq) {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    if (ws.bufferedAmount > 2 * 1024 * 1024) { ws.close(1013, 'slow client'); return; }
+    ws.send(JSON.stringify({ event, data, seq }));
   }
-  let data;
-  try { data = JSON.parse(text); } catch {
-    const error = new Error("AI upstream returned invalid JSON");
-    error.code = "ai_upstream_invalid";
-    throw error;
-  }
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== "string" || !content.trim()) {
-    const error = new Error("AI upstream returned an empty answer");
-    error.code = "ai_upstream_empty";
-    throw error;
-  }
-  return content.trim().slice(0, 5000);
-}
-function sse(res, event, data) {
-  res.write(`event: ${event}\n`);
-  res.write(`data: ${JSON.stringify(data)}\n\n`);
-}
-app.use((req, res, next) => {
-  if (req.path.startsWith("/api/") && rateLimited(req)) return res.status(429).json({ error: "rate_limited" });
-  next();
-});
-app.get("/api/health", (_req, res) => {
-  res.json({
-    ok: true,
-    fakeMode: process.env.DEMO_FAKE_MODE === "1",
-    configured: process.env.DEMO_FAKE_MODE === "1" || Boolean(process.env.AI_API_KEY && (process.env.AI_MODEL || (process.env.AI_MODEL_STRATEGIST && process.env.AI_MODEL_ENGINEER && process.env.AI_MODEL_CRITIC)))
+  server.on('upgrade', (req, socket, head) => {
+    const key = ip(req);
+    if (req.url !== '/api/live' || !sameOrigin(req) || limited(req) || (connections.get(key) || 0) >= 6 || wss.clients.size >= 600) {
+      socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); return;
+    }
+    connections.set(key, (connections.get(key) || 0) + 1);
+    let counted = true;
+    const uncount = () => { if (!counted) return; counted = false; const n = (connections.get(key) || 1) - 1; if (n) connections.set(key, n); else connections.delete(key); };
+    socket.once('close', uncount);
+    socket.on('error', () => socket.destroy());
+    wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
   });
-});
-app.post("/api/rooms", (_req, res) => res.status(201).json(publicRoom(createRoom())));
-app.get("/api/rooms/:roomId", (req, res) => {
-  prune();
-  const room = rooms.get(req.params.roomId);
-  if (!room) return res.status(404).json({ error: "room_not_found" });
-  res.json(publicRoom(room));
-});
-app.post("/api/rooms/:roomId/turns/stream", async (req, res) => {
-  prune();
-  const room = rooms.get(req.params.roomId);
-  if (!room) return res.status(404).json({ error: "room_not_found" });
-  if (room.busy) return res.status(409).json({ error: "room_busy" });
-  if (room.userTurns >= MAX_USER_TURNS) return res.status(429).json({ error: "turn_limit_reached" });
-  const content = cleanInput(req.body?.content);
-  if (!content) return res.status(400).json({ error: "invalid_message" });
-  const agents = selectedAgents(req.body?.targetAgentId || "");
-  if (!agents.length) return res.status(400).json({ error: "unknown_agent" });
-
-  room.busy = true;
-  room.updatedAt = now();
-  room.userTurns += 1;
-  const userMessage = { id: crypto.randomUUID(), kind: "user", content, createdAt: new Date().toISOString() };
-  room.messages.push(userMessage);
-
-  res.status(200);
-  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders?.();
-
-  const cancellation = new AbortController();
-  let finished = false;
-  res.on("close", () => { if (!finished) cancellation.abort(); });
-  try {
-    sse(res, "accepted", { userMessage, userTurns: room.userTurns, maxUserTurns: MAX_USER_TURNS });
-    for (const agent of agents) {
-      sse(res, "agent_start", { agentId: agent.id });
+  wss.on('connection', (ws, req) => {
+    let room, release;
+    ws.alive = true;
+    const joinTimer = setTimeout(() => ws.close(1008, 'join required'), 8000);
+    ws.on('pong', () => { ws.alive = true; });
+    ws.on('error', () => ws.terminate());
+    ws.on('close', () => { clearTimeout(joinTimer); release?.(); });
+    ws.on('message', (bytes, binary) => {
+      let command;
       try {
-        const answer = await callAgent(agent, room, cancellation.signal);
-        const message = {
-          id: crypto.randomUUID(), kind: "agent", agentId: agent.id, agentName: agent.name,
-          agentLabel: agent.label, content: answer, createdAt: new Date().toISOString()
-        };
-        room.messages.push(message);
-        room.updatedAt = now();
-        sse(res, "agent", message);
-      } catch (error) {
-        if (cancellation.signal.aborted) throw error;
-        sse(res, "agent_error", { agentId: agent.id, code: error?.code || "agent_failed", message: "이 에이전트의 응답을 가져오지 못했습니다." });
+        if (binary) throw new Error('binary');
+        command = JSON.parse(bytes.toString());
+        if (!command || typeof command !== 'object' || Array.isArray(command)) throw new Error('shape');
+      } catch { send(ws, 'command_error', { code: 'invalid_command' }); return; }
+      try {
+        if (limited(req)) { send(ws, 'command_error', { requestId: command.requestId, code: 'rate_limited' }); return; }
+        if (!room) {
+          if (command.type !== 'join' || typeof command.roomId !== 'string') { ws.close(1008, 'join required'); return; }
+          room = store.get(command.roomId);
+          if (room.listeners.size >= 3) { room = null; ws.close(1013, 'room connection limit'); return; }
+          clearTimeout(joinTimer);
+          release = store.subscribe(room, p => send(ws, p.event, p.data, p.seq));
+          return;
+        }
+        if (store.get(room.id) !== room) throw new Error('room expired');
+        if (command.type === 'cancel') { store.stop(room); send(ws, 'cancel_requested', {}); return; }
+        if (command.type === 'sync') { send(ws, 'snapshot', store.snapshot(room), room.seq); return; }
+        const { duplicate, completion } = store.start(room, command);
+        if (duplicate) send(ws, 'snapshot', store.snapshot(room), room.seq);
+        completion.catch(() => send(ws, 'command_error', { code: 'server_error' }));
+      } catch (e) {
+        send(ws, 'command_error', { requestId: command.requestId, code: e.code || 'server_error' });
+        if (e.code === 'room_not_found') ws.close(1008, 'room expired');
       }
-    }
-    sse(res, "done", { userTurns: room.userTurns, maxUserTurns: MAX_USER_TURNS });
-    finished = true;
-    res.end();
-  } catch (error) {
-    if (!cancellation.signal.aborted && !res.writableEnded) {
-      sse(res, "fatal", { code: error?.code || "turn_failed", message: "응답 도중 연결이 종료되었습니다." });
-      finished = true;
-      res.end();
-    }
-  } finally {
-    room.busy = false;
-    room.updatedAt = now();
+    });
+  });
+  const heartbeat = setInterval(() => {
+    for (const ws of wss.clients) { if (!ws.alive) ws.terminate(); else { ws.alive = false; ws.ping(); } }
+    store.prune();
+    for (const [key, entry] of rates) if (Date.now() - entry.started > 60000) rates.delete(key);
+  }, 20000);
+  heartbeat.unref();
+  async function close() {
+    clearInterval(heartbeat); store.close();
+    for (const ws of wss.clients) ws.terminate();
+    wss.close();
+    await new Promise(resolve => { server.close(resolve); server.closeIdleConnections?.(); });
   }
-});
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dist = path.join(__dirname, "dist");
-app.use(express.static(dist, { index: false, maxAge: process.env.NODE_ENV === "production" ? "1h" : 0 }));
-app.get("/{*splat}", (_req, res) => res.sendFile(path.join(dist, "index.html")));
-app.listen(PORT, "0.0.0.0", () => console.log(`AgentsAssemble Public Demo listening on :${PORT}`));
+  return { app, server, store, close };
+}
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const runtime = createDemoServer();
+  const port = Number(process.env.PORT || 3000);
+  runtime.server.listen(port, '0.0.0.0', () => console.log(JSON.stringify({ event: 'demo_started', version: '0.3.0', port, maxTokens: aiConfig().maxTokens, timeoutMs: aiConfig().timeoutMs, mode: aiConfig().fake ? 'fixture' : 'cloud-api', rustConnected: false })));
+  let stopping = false;
+  const stop = () => { if (stopping) return; stopping = true; const timer = setTimeout(() => process.exit(1), 10000); timer.unref(); runtime.close().then(() => { clearTimeout(timer); process.exit(0); }); };
+  process.once('SIGTERM', stop); process.once('SIGINT', stop);
+}

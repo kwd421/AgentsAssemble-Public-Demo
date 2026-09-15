@@ -1,19 +1,23 @@
 {
   "name": "agentsassemble-public-demo",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "engines": { "node": ">=22" },
   "scripts": {
-    "dev": "concurrently \"node --watch server.mjs\" \"vite --host 0.0.0.0\"",
+    "dev": "concurrently \"node --env-file=.env --watch server.mjs\" \"vite --host 0.0.0.0\"",
     "build": "vite build",
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:core": "node --test test/core.test.mjs"
   },
   "dependencies": {
     "express": "5.1.0",
     "lucide-react": "1.16.0",
     "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react-dom": "19.2.6",
+    "react-markdown": "10.1.0",
+    "ws": "8.21.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.0",

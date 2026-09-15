@@ -14,14 +14,15 @@ RUN rm -rf src/styles/original src/assets \
   && cp -R /tmp/original/frontend/src/styles/original src/styles/original \
   && if [ -d /tmp/original/frontend/src/assets ]; then cp -R /tmp/original/frontend/src/assets src/assets; fi \
   && if [ -d /tmp/original/frontend/public ]; then cp -R /tmp/original/frontend/public/. public/; fi
-RUN npm run build
+RUN npm test && npm run build && npm prune --omit=dev
 
 FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
-COPY package.json ./
-RUN npm install --omit=dev
+COPY --from=build /app/package.json /app/package-lock.json ./
+COPY --from=build /app/node_modules ./node_modules
 COPY server.mjs ./
+COPY lib ./lib
 COPY --from=build /app/dist ./dist
 EXPOSE 3000
 CMD ["node", "server.mjs"]
