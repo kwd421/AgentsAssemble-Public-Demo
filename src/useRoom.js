@@ -21,10 +21,15 @@ export function useRoom() {
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const [epoch, setEpoch] = useState(0);
-  const socket = useRef(null), pendingCommand = useRef(null), seq = useRef(-1);
+  const socket = useRef(null), pendingCommand = useRef(null), seq = useRef(-1), profileQueue = useRef(null);
   useEffect(() => {
     let stopped = false, timer, ws, id, backoff = 500;
     const controller = new AbortController();
+    function finishProfileQueue(ok) {
+      const queue = profileQueue.current;
+      profileQueue.current = null;
+      try { queue?.onDone?.(ok); } catch { /* UI callback */ }
+    }
     function acceptSnapshot(data, number) {
       seq.current = number ?? data.seq;
       setRoom(data); setConnection('connected'); setPending(false);
@@ -35,22 +40,36 @@ export function useRoom() {
       pendingCommand.current = null;
     }
     function updateAgent(agentId, patch) { setRoom(r => ({ ...r, agents: r.agents.map(a => a.id === agentId ? { ...a, ...patch } : a) })); }
+    function sendNextQueuedProfile() {
+      const queue = profileQueue.current;
+      const next = queue?.items.shift();
+      if (!next) {
+        pendingCommand.current = null; setPending(false); setError(''); finishProfileQueue(true); return;
+      }
+      const request = { type: 'agent_profile_update', ...next, requestId: crypto.randomUUID() };
+      pendingCommand.current = request;
+      try { ws.send(JSON.stringify(request)); }
+      catch { pendingCommand.current = null; setPending(false); setError('프로필을 저장하지 못했습니다.'); finishProfileQueue(false); }
+    }
     function handle(packet) {
       const { event, data, seq: number } = packet;
       if (event === 'snapshot') { acceptSnapshot(data, number); return; }
       if (event === 'command_error') {
         setError(ERRORS[data.code] || `요청을 처리하지 못했습니다. (${data.code})`);
-        setPending(false); pendingCommand.current = null;
+        setPending(false); pendingCommand.current = null; finishProfileQueue(false);
         if (data.code === 'room_not_found') { save(''); setEpoch(n => n + 1); }
         return;
       }
-      if (event === 'expired') { save(''); setError(ERRORS.room_not_found); setEpoch(n => n + 1); return; }
+      if (event === 'expired') { finishProfileQueue(false); save(''); setError(ERRORS.room_not_found); setEpoch(n => n + 1); return; }
       if (typeof number === 'number' && number <= seq.current) return;
       if (typeof number === 'number') seq.current = number;
       if (event === 'agent_profile_updated') {
         const command = pendingCommand.current;
-        if (command?.requestId === data.requestId) { pendingCommand.current = null; setPending(false); setError(''); }
-        updateAgent(data.agent.id, data.agent);
+        if (command?.requestId === data.requestId) {
+          updateAgent(data.agent.id, data.agent);
+          if (profileQueue.current) sendNextQueuedProfile();
+          else { pendingCommand.current = null; setPending(false); setError(''); }
+        } else updateAgent(data.agent.id, data.agent);
         return;
       }
       if (event === 'accepted') {
@@ -83,7 +102,7 @@ export function useRoom() {
       ws.onerror = () => { if (!stopped) setConnection('disconnected'); };
       ws.onclose = () => {
         if (stopped) return;
-        setConnection('disconnected'); setPending(false);
+        finishProfileQueue(false); setConnection('disconnected'); setPending(false); pendingCommand.current = null;
         timer = setTimeout(connect, backoff); backoff = Math.min(10000, backoff * 2);
       };
     }
@@ -107,7 +126,7 @@ export function useRoom() {
       } catch (e) { if (!stopped) { setConnection('disconnected'); setError(e.message || '연결 실패'); } }
     }
     init();
-    return () => { stopped = true; controller.abort(); clearTimeout(timer); ws?.close(); if (socket.current === ws) socket.current = null; };
+    return () => { stopped = true; controller.abort(); clearTimeout(timer); finishProfileQueue(false); ws?.close(); if (socket.current === ws) socket.current = null; };
   }, [epoch]);
   function send(command) {
     if (socket.current?.readyState !== WebSocket.OPEN || connection !== 'connected') { setError('서버에 연결된 뒤 다시 시도하세요.'); return false; }
@@ -120,7 +139,18 @@ export function useRoom() {
   function submit() { const content = draft.trim(); if (content && content.length <= 2500) send({ type: 'turn', content }); }
   function retry(failureId) { send({ type: 'retry', failureId }); }
   function updateAgentProfile(agentId, name, instruction) { return send({ type: 'agent_profile_update', agentId, name, instruction }); }
+  function updateAgentProfiles(items, onDone) {
+    if (socket.current?.readyState !== WebSocket.OPEN || connection !== 'connected') { setError('서버에 연결된 뒤 다시 시도하세요.'); return false; }
+    if (pendingCommand.current || pending || room.busy || profileQueue.current) return false;
+    const queue = (Array.isArray(items) ? items : []).filter(x => x?.agentId && x?.name && x?.instruction);
+    if (!queue.length) { onDone?.(true); return true; }
+    profileQueue.current = { items: queue.slice(1), onDone };
+    const request = { type: 'agent_profile_update', ...queue[0], requestId: crypto.randomUUID() };
+    pendingCommand.current = request; setPending(true); setError('');
+    try { socket.current.send(JSON.stringify(request)); return true; }
+    catch { profileQueue.current = null; pendingCommand.current = null; setPending(false); setError('프로필을 저장하지 못했습니다.'); onDone?.(false); return false; }
+  }
   function cancel() { if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify({ type: 'cancel' })); }
-  function reset() { if (room.busy || pending) return; pendingCommand.current = null; save(''); setRoom(EMPTY); setError(''); setEpoch(n => n + 1); }
-  return { room, draft, setDraft, connection, error, setError, pending, submit, retry, updateAgentProfile, cancel, reset };
+  function reset() { if (room.busy || pending) return; profileQueue.current = null; pendingCommand.current = null; save(''); setRoom(EMPTY); setError(''); setEpoch(n => n + 1); }
+  return { room, draft, setDraft, connection, error, setError, pending, submit, retry, updateAgentProfile, updateAgentProfiles, cancel, reset };
 }
