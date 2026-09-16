@@ -9,6 +9,8 @@ const ERRORS = {
   turn_limit_reached: '최대 대화 횟수에 도달했습니다. 새 방에서 다시 시작하세요.',
   retry_not_available: '이 응답은 더 이상 재시도할 수 없습니다. 마지막 질문의 실패한 응답만 한 번 재시도할 수 있습니다.',
   invalid_message: '메시지는 1~2,500자로 입력하세요.', room_capacity: '체험방이 가득 찼습니다. 잠시 뒤 다시 시도하세요.',
+  invalid_agent_profile: '프로필 이름은 1~40자, 지시문은 1~1,200자로 입력하세요.',
+  unknown_agent: '해당 에이전트를 찾지 못했습니다.',
 };
 function stored() { try { return sessionStorage.getItem(KEY) || ''; } catch { return ''; } }
 function save(value) { try { if (value) sessionStorage.setItem(KEY, value); else sessionStorage.removeItem(KEY); } catch { /* private browser */ } }
@@ -27,7 +29,7 @@ export function useRoom() {
       seq.current = number ?? data.seq;
       setRoom(data); setConnection('connected'); setPending(false);
       const command = pendingCommand.current;
-      if (command && data.messages.some(m => m.requestId === command.requestId)) {
+      if (command?.type === 'turn' && data.messages.some(m => m.requestId === command.requestId)) {
         setDraft(current => current.trim() === command.content ? '' : current);
       }
       pendingCommand.current = null;
@@ -45,6 +47,12 @@ export function useRoom() {
       if (event === 'expired') { save(''); setError(ERRORS.room_not_found); setEpoch(n => n + 1); return; }
       if (typeof number === 'number' && number <= seq.current) return;
       if (typeof number === 'number') seq.current = number;
+      if (event === 'agent_profile_updated') {
+        const command = pendingCommand.current;
+        if (command?.requestId === data.requestId) { pendingCommand.current = null; setPending(false); setError(''); }
+        updateAgent(data.agent.id, data.agent);
+        return;
+      }
       if (event === 'accepted') {
         const command = pendingCommand.current;
         if (command?.requestId === data.requestId && command.type === 'turn') setDraft(current => current.trim() === command.content ? '' : current);
@@ -102,16 +110,17 @@ export function useRoom() {
     return () => { stopped = true; controller.abort(); clearTimeout(timer); ws?.close(); if (socket.current === ws) socket.current = null; };
   }, [epoch]);
   function send(command) {
-    if (socket.current?.readyState !== WebSocket.OPEN || connection !== 'connected') { setError('서버에 연결된 뒤 다시 시도하세요.'); return; }
-    if (pendingCommand.current || pending || room.busy) return;
+    if (socket.current?.readyState !== WebSocket.OPEN || connection !== 'connected') { setError('서버에 연결된 뒤 다시 시도하세요.'); return false; }
+    if (pendingCommand.current || pending || room.busy) return false;
     const request = { ...command, requestId: crypto.randomUUID() };
     pendingCommand.current = request; setPending(true); setError('');
-    try { socket.current.send(JSON.stringify(request)); }
-    catch { pendingCommand.current = null; setPending(false); setError('전송하지 못했습니다. 입력은 유지됩니다.'); }
+    try { socket.current.send(JSON.stringify(request)); return true; }
+    catch { pendingCommand.current = null; setPending(false); setError('전송하지 못했습니다. 입력은 유지됩니다.'); return false; }
   }
   function submit() { const content = draft.trim(); if (content && content.length <= 2500) send({ type: 'turn', content }); }
   function retry(failureId) { send({ type: 'retry', failureId }); }
+  function updateAgentProfile(agentId, name, instruction) { return send({ type: 'agent_profile_update', agentId, name, instruction }); }
   function cancel() { if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify({ type: 'cancel' })); }
   function reset() { if (room.busy || pending) return; pendingCommand.current = null; save(''); setRoom(EMPTY); setError(''); setEpoch(n => n + 1); }
-  return { room, draft, setDraft, connection, error, setError, pending, submit, retry, cancel, reset };
+  return { room, draft, setDraft, connection, error, setError, pending, submit, retry, updateAgentProfile, cancel, reset };
 }
