@@ -1,0 +1,50 @@
+name: UI verification
+on:
+  push:
+    branches: [ui/discord-profile-polish]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ui-verification-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Restore the original pinned room styles
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init /tmp/aa-original
+          git -C /tmp/aa-original remote add origin https://github.com/kwd421/agentsassemble-rust.git
+          git -C /tmp/aa-original fetch --depth 1 origin 2135d5112d00f80996a5f6ce98762515049cfcb8
+          git -C /tmp/aa-original checkout --detach FETCH_HEAD
+          mkdir -p src/styles public
+          cp -R /tmp/aa-original/frontend/src/styles/original src/styles/original
+          if [ -d /tmp/aa-original/frontend/src/assets ]; then cp -R /tmp/aa-original/frontend/src/assets src/assets; fi
+          if [ -d /tmp/aa-original/frontend/public ]; then cp -R /tmp/aa-original/frontend/public/. public/; fi
+      - name: Unit tests and production build
+        run: npm install && npm test && npm run build
+      - name: Install browser and Korean fonts for visual checks
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium
+          sudo apt-get install -y fonts-noto-cjk
+      - name: Browser interaction and responsive layout checks
+        run: node scripts/ui-smoke.mjs
+      - name: Upload screenshots and verification results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-evidence
+          path: ui-evidence/
+          if-no-files-found: warn
+          retention-days: 7
