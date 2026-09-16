@@ -63,6 +63,10 @@
   font-size: 12px;
   line-height: 1.55;
 }
+/* The original desktop host hides action buttons on mobile. The public demo
+   needs both help and members there because it has no mobile host menu. */
+.aa-ui .dc-head-actions > button.dc-head-icon { display: grid !important; }
 @media (max-width: 760px) {
   .demo-right-panel { display: none !important; }
+  .aa-ui .dc-head-actions > button.dc-head-icon { width: 40px; height: 40px; }
 }
