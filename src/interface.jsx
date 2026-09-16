@@ -1,10 +1,10 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, AtSign, BookOpen, ChevronRight, Hash, MessageSquare, Pencil, Save, X } from 'lucide-react';
 
-const ROLE_COPY = {
-  strategist: { title: '전략가', detail: '목표와 우선순위', hint: '예: 목표를 먼저 정리하고, 중요한 선택지 두 가지를 비교하세요.' },
-  engineer: { title: '엔지니어', detail: '구현과 실행 가능성', hint: '예: 구현 가능성을 우선 검토하고, 결론·이유·리스크 순으로 답하세요.' },
-  critic: { title: '비평가', detail: '근거와 다른 가능성', hint: '예: 앞선 답변의 근거를 점검하고, 놓친 조건이 있을 때만 반론을 제시하세요.' },
+const INSTRUCTION_HINTS = {
+  strategist: '예: 목표를 먼저 정리하고, 중요한 선택지 두 가지를 비교하세요.',
+  engineer: '예: 구현 가능성을 우선 검토하고, 결론·이유·리스크 순으로 답하세요.',
+  critic: '예: 앞선 답변의 근거를 점검하고, 놓친 조건이 있을 때만 반론을 제시하세요.',
 };
 
 export function AgentAvatar({ agent, large = false, human = false }) {
@@ -14,7 +14,7 @@ export function AgentAvatar({ agent, large = false, human = false }) {
 function AgentBanner({ agent, name, index, compact = false }) {
   return <div className={`aa-profile-identity${compact ? ' compact' : ''}`}>
     <div className="aa-profile-banner" aria-hidden="true"><span className="aa-banner-mark" /><span className="aa-banner-index">{index == null ? 'AI' : `0${index + 1}`}</span></div>
-    <div className="aa-profile-title"><AgentAvatar agent={agent} large /><span className="aa-role-tag">{ROLE_COPY[agent.id]?.detail || agent.role}</span><h3>{name || agent.name}</h3><span className="aa-profile-handle">@{agent.id}</span></div>
+    <div className="aa-profile-title"><AgentAvatar agent={agent} large /><span className="aa-role-tag">{agent.role || '역할 미설정'}</span><h3>{name || agent.name}</h3><span className="aa-profile-handle">@{agent.id}</span></div>
   </div>;
 }
 
@@ -29,7 +29,7 @@ function ProfileFields({ agent, name, instruction, onName, onInstruction, disabl
   const id = useId();
   return <div className="aa-profile-fields">
     <div className="aa-field"><div className="aa-field-label"><label htmlFor={`${id}-name`}>프로필 이름</label><span aria-hidden="true">{name.length} / 40</span></div><input id={`${id}-name`} autoComplete="off" value={name} onChange={e => onName(e.target.value)} maxLength={40} disabled={disabled} placeholder={setup ? agent.name : '예: 제품 기획자'} /></div>
-    <div className="aa-field"><div className="aa-field-label"><label htmlFor={`${id}-instruction`}>지시문</label><span aria-hidden="true">{instruction.length} / 1200</span></div><textarea id={`${id}-instruction`} value={instruction} onChange={e => onInstruction(e.target.value)} maxLength={1200} rows={7} disabled={disabled} aria-describedby={`${id}-hint`} placeholder={setup ? agent.instruction : ROLE_COPY[agent.id]?.hint || '역할, 판단 기준, 답변 형식을 입력합니다.'} /><p id={`${id}-hint`} className="aa-field-hint">{setup ? '비워두면 현재 지시문을 사용합니다.' : '역할과 답변 형식, 우선할 기준을 적습니다.'}</p></div>
+    <div className="aa-field"><div className="aa-field-label"><label htmlFor={`${id}-instruction`}>지시문</label><span aria-hidden="true">{instruction.length} / 1200</span></div><textarea id={`${id}-instruction`} value={instruction} onChange={e => onInstruction(e.target.value)} maxLength={1200} rows={7} disabled={disabled} aria-describedby={`${id}-hint`} placeholder={setup ? agent.instruction : INSTRUCTION_HINTS[agent.id] || '역할, 판단 기준, 답변 형식을 입력합니다.'} /><p id={`${id}-hint`} className="aa-field-hint">{setup ? '비워두면 현재 지시문을 사용합니다.' : '역할과 답변 형식, 우선할 기준을 적습니다.'}</p></div>
   </div>;
 }
 
@@ -107,14 +107,14 @@ export function IntroModal({ agents, connected, pending, onApply, onClose }) {
       {page === 0 ? <>
         <div className="aa-dialog-scroll aa-welcome" ref={scrollArea}>
           <div className="aa-welcome-copy"><span className="aa-small-label">처음 오셨나요?</span><h2 id="aa-dialog-title" ref={title} tabIndex={-1}>대화 시작</h2><p id="aa-dialog-description" className="aa-dialog-description">한 방에서 세 에이전트의<br className="aa-desktop-break" /> 의견을 함께 확인합니다.</p><div className="aa-welcome-instructions"><p>질문을 보내면 세 에이전트가 순서대로 답합니다. 별도의 명령어는 필요하지 않습니다.</p><p>한 명만 부를 때는 <code>@engineer</code>처럼 멘션합니다. 이름과 지시문은 다음 화면이나 오른쪽 멤버 패널에서 수정할 수 있습니다.</p></div></div>
-          <div className="aa-welcome-roster"><div className="aa-roster-heading">대화에 참여하는 에이전트<span>3</span></div>{['strategist', 'engineer', 'critic'].map((id, index) => { const agent = agents.find(a => a.id === id) || { id, name: ROLE_COPY[id].title, initial: id[0].toUpperCase() }; return <div className="aa-welcome-member" data-agent={id} key={id}><AgentAvatar agent={agent} /><div><strong>{agent.name}</strong><p>{ROLE_COPY[id].detail}</p></div><span className="aa-member-order">0{index + 1}</span></div>; })}<p className="aa-roster-note">각 에이전트는 앞선 답변을 읽고<br />자신의 역할에 따라 이어서 답합니다.</p></div>
+          <div className="aa-welcome-roster"><div className="aa-roster-heading">대화에 참여하는 에이전트<span>3</span></div>{['strategist', 'engineer', 'critic'].map((id, index) => { const agent = agents.find(a => a.id === id) || { id, name: '연결 중…', initial: id[0].toUpperCase(), role: '에이전트 정보를 불러오는 중' }; return <div className="aa-welcome-member" data-agent={id} key={id}><AgentAvatar agent={agent} /><div><strong>{agent.name}</strong><p>{agent.role || '역할 미설정'}</p></div><span className="aa-member-order">0{index + 1}</span></div>; })}<p className="aa-roster-note">각 에이전트는 앞선 답변을 읽고<br />자신의 역할에 따라 이어서 답합니다.</p></div>
           <details className="aa-technical-note"><summary>동작 방식<ChevronRight size={15} /></summary><p>서버가 대화 기록과 에이전트별 지시문을 AI 모델에 전달합니다. WebSocket 연결로 응답과 상태를 화면에 실시간 반영합니다. 이 공개 데모에는 웹 검색과 로컬 파일 접근 기능이 없습니다.</p></details>
         </div>
         <footer className="aa-dialog-footer"><p>설정은 나중에 바꿀 수 있습니다.</p><div><button type="button" className="aa-button quiet" onClick={close} disabled={locked}>바로 입장</button><button type="button" className="aa-button primary" onClick={() => setPage(1)} disabled={locked}>다음<ArrowRight size={17} /></button></div></footer>
       </> : <form className="aa-setup-form" onSubmit={applyProfiles}>
         <div className="aa-dialog-scroll" ref={scrollArea}>
           <div className="aa-setup-heading"><div><button type="button" className="aa-back-button" onClick={() => setPage(0)} disabled={locked}><ArrowLeft size={16} />이전</button><h2 id="aa-dialog-title" ref={title} tabIndex={-1}>에이전트 설정</h2><p id="aa-dialog-description" className="aa-dialog-description">이름과 지시문을 수정할 수 있습니다. 비워둔 항목은 현재 설정을 유지합니다.</p></div><span className="aa-optional-label">선택 사항</span></div>
-          {agents.length === 3 ? <div className="aa-setup-grid">{agents.map((agent, index) => { const draft = drafts[agent.id] || {}; return <article className="aa-setup-card" data-agent={agent.id} key={agent.id} aria-label={`${ROLE_COPY[agent.id]?.title || agent.name} 설정`}>
+          {agents.length === 3 ? <div className="aa-setup-grid">{agents.map((agent, index) => { const draft = drafts[agent.id] || {}; return <article className="aa-setup-card" data-agent={agent.id} key={agent.id} aria-label={`${agent.name} 설정`}>
             <AgentBanner agent={agent} name={(draft.name || '').trim()} index={index} />
             <ProfileFields agent={agent} name={draft.name || ''} instruction={draft.instruction || ''} onName={value => setField(agent.id, 'name', value)} onInstruction={value => setField(agent.id, 'instruction', value)} disabled={locked || !connected} setup />
           </article>; })}</div> : <p className="aa-loading" role="status">에이전트 설정을 불러오는 중입니다.</p>}
