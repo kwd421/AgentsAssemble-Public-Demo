@@ -14,8 +14,18 @@
 .demo-message-meta { font-size: 10px; color: var(--color-text-muted); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .demo-connection { font-size: 10px; color: var(--color-text-muted); white-space: nowrap; }
 .demo-connection[data-state=connected] { color: var(--color-online); }
-.demo-runtime-card { margin: 20px 6px; padding: 10px; border: 1px solid rgba(255,255,255,.07); border-radius: 6px; font-size: 11px; color: var(--color-text-muted); line-height: 1.8; }
-.demo-runtime-card strong { color: var(--color-text-secondary); }
+.demo-guide-card { margin: 18px 6px; padding: 14px 12px; border: 1px solid rgba(88,101,242,.3); border-radius: 9px; background: linear-gradient(180deg, rgba(88,101,242,.11), rgba(255,255,255,.025)); box-shadow: 0 8px 24px rgba(0,0,0,.08); }
+.demo-guide-kicker { margin-bottom: 3px; color: #9da7ff; font-size: 9px; font-weight: 900; letter-spacing: .14em; }
+.demo-guide-card h3 { color: var(--color-text-primary); font-size: 14px; font-weight: 800; line-height: 1.25; }
+.demo-guide-lead { margin: 6px 0 12px; color: var(--color-text-secondary); font-size: 11px; line-height: 1.55; }
+.demo-guide-step { display: grid; grid-template-columns: 24px minmax(0,1fr); gap: 8px; align-items: start; padding: 9px 0; border-top: 1px solid rgba(255,255,255,.06); }
+.demo-guide-step > span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(88,101,242,.2); color: #c7cdff; font-size: 10px; font-weight: 900; }
+.demo-guide-step b { display: block; color: var(--color-text-primary); font-size: 11px; line-height: 1.25; }
+.demo-guide-step p { margin-top: 3px; color: var(--color-text-muted); font-size: 10px; line-height: 1.5; }
+.demo-guide-step code { border-radius: 4px; background: rgba(0,0,0,.22); padding: 1px 4px; color: #c7cdff; font-family: ui-monospace,monospace; font-size: 9px; }
+.demo-guide-tech { margin-top: 6px; padding: 10px; border-radius: 7px; background: rgba(0,0,0,.13); }
+.demo-guide-tech b { color: var(--color-text-secondary); font-size: 10px; }
+.demo-guide-tech p { margin-top: 4px; color: var(--color-text-muted); font-size: 10px; line-height: 1.5; }
 .demo-alert { display: flex; align-items: center; justify-content: space-between; margin: 12px 16px 0; padding: 10px 12px; border-radius: 5px; border: 1px solid rgba(244,162,97,.3); background: rgba(244,162,97,.08); color: var(--color-text-secondary); font-size: 12px; }
 .demo-alert button { padding: 0 4px; margin-left: 8px; }
 .demo-failure { margin: 12px 16px 12px 68px; border: 1px solid rgba(237,66,69,.3); background: rgba(237,66,69,.07); padding: 12px; border-radius: 6px; font-size: 12px; line-height: 1.7; }
