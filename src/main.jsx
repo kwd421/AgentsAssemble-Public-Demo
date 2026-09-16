@@ -80,7 +80,15 @@ function App() {
         <div className="dc-sidebar-banner"><span className="dc-sidebar-server-icon">AA</span><div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-wide text-white/70">Room</p><p className="text-[12px] font-semibold text-text-muted">Wanted AI Championship 2026</p></div></div>
       </header>
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-3 chat-scroll" aria-label="채널"><section className="dc-channel-section"><div className="dc-channel-category"><ChevronDown size={12} /> Text Channels</div><button data-active="true" className="dc-channel"><Hash size={18} /><span>general</span></button></section>
-        <div className="demo-runtime-card"><strong>빠르게 체험하기</strong><p><b>@all</b>을 붙이면 세 AI가 같은 Room 대화 기록을 읽고 순서대로 답합니다.</p><p><b>오른쪽 Agent 카드</b>를 누르면 현재 이름과 지시문을 보고 이 Room에서 직접 바꿀 수 있습니다.</p><p><b>기술적으로는</b> WebSocket으로 메시지와 상태를 실시간 동기화하고, 저장한 지시문을 AI에게 먼저 주는 역할 지시(system prompt)에 넣어 다음 답변부터 적용합니다.</p><p>공개 데모는 <b>Gemini 3.5 Flash-Lite</b>를 사용하며 웹 검색·로컬 파일 접근은 연결하지 않았습니다.</p></div>
+        <section className="demo-guide-card" aria-label="데모 사용 안내">
+          <div className="demo-guide-kicker">HOW TO TRY</div>
+          <h3>그냥 질문해 보세요</h3>
+          <p className="demo-guide-lead">멘션 없이 말해도 세 AI가 같은 대화 기록을 읽고 각자의 역할로 차례대로 답합니다.</p>
+          <div className="demo-guide-step"><span>1</span><div><b>일반 질문</b><p>평소 채팅하듯 입력하면 전략가 → 엔지니어 → 비평가가 이어서 답합니다.</p></div></div>
+          <div className="demo-guide-step"><span>2</span><div><b>특정 AI만 호출</b><p><code>@engineer</code>처럼 멘션하면 원하는 Agent에게만 질문할 수 있습니다.</p></div></div>
+          <div className="demo-guide-step"><span>3</span><div><b>Agent 직접 편집</b><p>오른쪽 Agent 카드를 눌러 이름과 지시문을 바꾸면 다음 답변부터 바로 반영됩니다.</p></div></div>
+          <div className="demo-guide-tech"><b>어떻게 동작하나요?</b><p>WebSocket으로 Room의 메시지와 상태를 실시간 동기화하고, 각 Agent는 앞선 대화를 함께 읽습니다. 편집한 지시문은 다음 Gemini 요청의 역할 지시로 사용됩니다.</p></div>
+        </section>
       </nav>
       <footer className="dc-user-area shrink-0"><div className="flex items-center gap-2 px-2 py-2"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent text-[11px] font-black text-white">YOU</span><div className="min-w-0 flex-1"><p className="text-[12px] font-bold">Public Visitor</p><p className="text-[10px] text-text-muted">{room.userTurns}/{room.maxUserTurns} turns · memory-only</p></div><button className="dc-head-icon" onClick={() => { setSelectedAgentId(null); reset(); }} disabled={busy} title="새 체험방" aria-label="새 체험방"><RefreshCw size={16} /></button></div></footer>
     </aside>
@@ -92,7 +100,7 @@ function App() {
       {error && <div className="demo-alert" role="alert"><span>{error}</span><button onClick={() => setError('')} aria-label="안내 닫기">×</button></div>}
       {room.runtime?.mode === 'fixture' && <div className="demo-alert" role="status">실제 AI가 아닌 UI 테스트용 고정 응답입니다.</div>}
       <div ref={feedRef} className="relative min-h-0 flex-1 overflow-y-auto py-4 chat-scroll" style={{ overflowAnchor: 'none' }} onScroll={e => { const n = e.currentTarget; bottom.current = n.scrollHeight - n.scrollTop - n.clientHeight < 100; }}>
-        <section className="dc-channel-intro px-4 pb-5 pt-2"><span className="dc-channel-intro-icon"><Hash size={26} /></span><h2 className="mt-3 text-[28px] font-black leading-tight">AgentsAssemble Demo</h2><p className="mt-1 max-w-2xl text-[14px] leading-relaxed text-text-muted">같은 Room 기록을 여러 AI 역할이 읽고 차례로 답합니다. @engineer처럼 한 명을 부르거나 @all로 모두 부르세요.</p><p className="mt-1 text-[12px] text-text-muted">우측 Agent 카드를 누르면 이 Room에서 사용할 이름과 지시문을 직접 바꿀 수 있습니다. 웹 검색은 연결되어 있지 않습니다.</p></section>
+        <section className="dc-channel-intro px-4 pb-5 pt-2"><span className="dc-channel-intro-icon"><Hash size={26} /></span><h2 className="mt-3 text-[28px] font-black leading-tight">AgentsAssemble Demo</h2><p className="mt-1 max-w-2xl text-[14px] leading-relaxed text-text-muted">질문을 입력하면 세 AI가 같은 Room 대화를 읽고 서로의 답변을 이어받아 각자의 관점으로 답합니다. 특정 AI만 부르고 싶다면 <b>@engineer</b>처럼 멘션하세요.</p><p className="mt-1 text-[12px] text-text-muted">우측 Agent 카드를 누르면 이 Room에서 사용할 이름과 지시문을 직접 바꿀 수 있습니다. 웹 검색은 연결되어 있지 않습니다.</p></section>
         {!room.messages.length && <p className="px-4 text-[13px] text-text-muted">아직 메시지가 없습니다. 첫 질문을 남겨 보세요.</p>}
         {query && !messages.length && <p className="px-4 text-[13px] text-text-muted">검색 결과가 없습니다.</p>}
         {messages.map(m => <MessageRow key={m.id} message={m} agents={room.agents} />)}
@@ -102,7 +110,7 @@ function App() {
       <div className="shrink-0 px-4 pb-5"><div className="demo-composer-info"><span>{room.agents.filter(a => a.state === 'queued').map(a => a.name).join(' → ')}{room.agents.some(a => a.state === 'queued') ? ' 차례 대기' : 'Enter 전송 · Shift+Enter 줄바꿈'}</span><span>{draft.length}/2500</span></div>
         <section className="dc-composer-shell"><div className="dc-composer-bar"><textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={onKeyDown} className="dc-composer-input" placeholder={room.userTurns >= room.maxUserTurns ? '대화 횟수 제한에 도달했습니다. 새 방을 시작하세요.' : '메시지 입력'} aria-label="채팅 입력" maxLength={2500} rows={1} disabled={room.userTurns >= room.maxUserTurns} />
           <button className="dc-composer-button" data-role="mention" onClick={() => setDraft(v => v + (v && !v.endsWith(' ') ? ' ' : '') + '@all ')} title="전체 멘션" aria-label="전체 멘션"><AtSign size={17} /></button>
-          {busy ? <button className="dc-composer-button" onClick={cancel} disabled={!connected || pending} title="응답 중지" aria-label="응답 중지"><Square size={17} /></button> : <button className="dc-composer-button send" data-role="send" disabled={!connected || !draft.trim() || room.userTurns >= room.maxUserTurns} onClick={submit} aria-label="채팅 메시지 보내기"><Send size={17} /></button>}
+          {busy ? <button className="dc-composer-button" onClick={cancel} disabled={!connected || pending} title="응답 중지" aria-label="응답 중지"><Square size={17} /></button> : <button className="dc-composer-button send" disabled={!connected || !draft.trim() || room.userTurns >= room.maxUserTurns} onClick={submit} aria-label="채팅 메시지 보내기"><Send size={17} /></button>}
         </div></section>
         {room.userTurns >= room.maxUserTurns && <button className="demo-target-chip mt-2" disabled={busy} onClick={() => { setSelectedAgentId(null); reset(); }}>새 체험방 시작</button>}
       </div>
