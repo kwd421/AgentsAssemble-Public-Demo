@@ -5,9 +5,10 @@ import { ArrowLeft, AtSign, Bot, ChevronDown, Hash, Home, RefreshCw, Save, Searc
 import { useRoom } from './useRoom.js';
 import './index.css';
 import './demo.css';
+import './onboarding.css';
 
 const LABELS = { idle: '대기', queued: '차례 대기', running: '응답 생성 중', retrying: '재시도 중', failed: '응답 실패', done: '응답 완료', cancelled: '중지됨' };
-const INTRO_KEY = 'aa-demo-intro-v1';
+const INTRO_KEY = 'aa-demo-intro-v2';
 function Avatar({ agent, human }) {
   return <span className={`dc-message-avatar mt-0.5 ${human ? 'demo-human-avatar' : 'agent'}`} aria-hidden="true"><span className="grid h-full w-full place-items-center text-[12px] font-black">{human ? '나' : agent?.initial || <Bot size={16} />}</span></span>;
 }
@@ -40,6 +41,9 @@ function RetryButton({ failure, disabled, retry }) {
   const seconds = Math.max(0, Math.ceil(((failure.retryAt || 0) - now) / 1000));
   return <button className="demo-target-chip" disabled={disabled || seconds > 0} onClick={() => retry(failure.id)}>{seconds ? `${seconds}초 뒤 재시도 가능` : '이 에이전트만 다시 시도'}</button>;
 }
+function PromptTip() {
+  return <div className="demo-prompt-tip"><b>지시문이 잘 먹히려면</b><p><strong>역할 → 우선순위 → 답변 형식 → 하지 말 것</strong> 순으로 구체적으로 적어주세요.</p><code>예: 구현 가능성을 최우선으로 검토하고, 결론 → 이유 → 리스크 순으로 짧게 답하세요. 확실하지 않은 수치는 만들어내지 마세요.</code></div>;
+}
 function AgentProfileEditor({ agent, disabled, pending, onBack, onMention, onSave }) {
   const [name, setName] = useState(agent.name);
   const [instruction, setInstruction] = useState(agent.instruction || '');
@@ -51,36 +55,74 @@ function AgentProfileEditor({ agent, disabled, pending, onBack, onMention, onSav
     <button className="demo-profile-back" onClick={onBack}><ArrowLeft size={15} /> 멤버 목록</button>
     <div className="demo-profile-head"><span className="demo-agent-initial">{agent.initial}</span><div className="min-w-0"><strong>{agent.name}</strong><small>@{agent.id} · {agent.role}</small></div></div>
     <div className="demo-profile-meta"><span>모델</span><strong title={agent.model}>{agent.model || '모델 미설정'}</strong></div>
-    <label className="demo-profile-field"><span>프로필 이름 <small>{name.length}/40</small></span><input value={name} onChange={e => setName(e.target.value)} maxLength={40} disabled={disabled} /></label>
-    <label className="demo-profile-field"><span>지시문 <small>{instruction.length}/1200</small></span><textarea value={instruction} onChange={e => setInstruction(e.target.value)} maxLength={1200} rows={10} disabled={disabled} /></label>
+    <label className="demo-profile-field"><span>프로필 이름 <small>{name.length}/40</small></span><input value={name} onChange={e => setName(e.target.value)} maxLength={40} disabled={disabled} placeholder="예: 리드 개발자, 아이디어 검토자" /></label>
+    <label className="demo-profile-field"><span>지시문 <small>{instruction.length}/1200</small></span><textarea value={instruction} onChange={e => setInstruction(e.target.value)} maxLength={1200} rows={10} disabled={disabled} placeholder="이 Agent가 어떤 역할로, 무엇을 우선해서, 어떤 형식으로 답해야 하는지 적어주세요." /></label>
+    <PromptTip />
     <p className="demo-profile-help">이 설정은 현재 임시 Room에만 저장되며 다음 응답부터 실제 system prompt에 반영됩니다. 방이 만료되거나 재배포되면 사라집니다.</p>
     <div className="demo-profile-actions"><button className="demo-secondary-button" onClick={onMention} disabled={disabled}><AtSign size={14} /> @{agent.id}</button><button className="demo-primary-button" disabled={disabled || invalid || !dirty} onClick={() => onSave(agent.id, cleanName, cleanInstruction)}><Save size={14} /> {pending ? '저장 중' : '저장'}</button></div>
   </div>;
 }
-function IntroModal({ onClose }) {
+function IntroModal({ agents, connected, pending, onApply, onClose }) {
+  const [page, setPage] = useState(0);
+  const [drafts, setDrafts] = useState({});
+  const [saveError, setSaveError] = useState('');
   useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape') onClose(); };
+    const onKey = e => { if (e.key === 'Escape' && !pending) onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  return <div className="demo-intro-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-    <section className="demo-intro-modal" role="dialog" aria-modal="true" aria-labelledby="demo-intro-title">
-      <button className="demo-intro-close" onClick={onClose} aria-label="안내 닫기"><X size={20} /></button>
-      <div className="demo-intro-kicker">AGENTSASSEMBLE · PUBLIC DEMO</div>
-      <h2 id="demo-intro-title">AI 3명에게 그냥 질문해 보세요</h2>
-      <p className="demo-intro-lead">한 질문을 전략가 → 엔지니어 → 비평가가 같은 Room 대화를 공유하면서 이어서 검토합니다.</p>
-      <div className="demo-intro-grid">
-        <article><span>1</span><div><b>그냥 채팅</b><p>멘션 없이 질문하면 세 Agent가 차례대로 답합니다.</p></div></article>
-        <article><span>2</span><div><b>한 명만 호출</b><p><code>@engineer</code>처럼 멘션하면 특정 Agent만 답합니다.</p></div></article>
-        <article><span>3</span><div><b>Agent 성격 바꾸기</b><p>오른쪽 Agent 카드를 눌러 이름과 지시문을 직접 편집해 보세요.</p></div></article>
-      </div>
-      <div className="demo-intro-tech"><b>간단한 기술 구조</b><p>WebSocket으로 Room 상태를 실시간 동기화하고, Agent마다 같은 대화 기록과 서로 다른 역할 지시를 Gemini 3.5 Flash-Lite에 전달합니다. 수정한 지시문도 다음 답변부터 즉시 반영됩니다.</p></div>
-      <button className="demo-intro-start" onClick={onClose}>바로 체험하기</button>
+  }, [onClose, pending]);
+  function setField(id, field, value) { setDrafts(d => ({ ...d, [id]: { ...(d[id] || {}), [field]: value } })); }
+  function applyProfiles() {
+    const updates = agents.map(agent => {
+      const draft = drafts[agent.id] || {};
+      const name = String(draft.name || '').trim();
+      const instruction = String(draft.instruction || '').trim();
+      if (!name && !instruction) return null;
+      return { agentId: agent.id, name: name || agent.name, instruction: instruction || agent.instruction };
+    }).filter(Boolean);
+    if (!updates.length) { onClose(); return; }
+    setSaveError('');
+    const started = onApply(updates, ok => { if (ok) onClose(); else setSaveError('프로필을 저장하지 못했습니다. 다시 시도해 주세요.'); });
+    if (!started) setSaveError('서버 연결이 완료된 뒤 다시 시도해 주세요.');
+  }
+  return <div className="demo-intro-backdrop" onMouseDown={e => { if (e.target === e.currentTarget && !pending) onClose(); }}>
+    <section className={`demo-intro-modal ${page === 1 ? 'setup' : ''}`} role="dialog" aria-modal="true" aria-labelledby="demo-intro-title">
+      <button className="demo-intro-close" onClick={onClose} disabled={pending} aria-label="안내 닫기"><X size={20} /></button>
+      {page === 0 ? <>
+        <div className="demo-intro-kicker">AGENTSASSEMBLE · PUBLIC DEMO</div>
+        <h2 id="demo-intro-title">AI 3명에게 그냥 질문해 보세요</h2>
+        <p className="demo-intro-lead">한 질문을 전략가 → 엔지니어 → 비평가가 같은 Room 대화를 공유하면서 이어서 검토합니다.</p>
+        <div className="demo-intro-grid">
+          <article><span>1</span><div><b>그냥 채팅</b><p>멘션 없이 질문하면 세 Agent가 차례대로 답합니다.</p></div></article>
+          <article><span>2</span><div><b>한 명만 호출</b><p><code>@engineer</code>처럼 멘션하면 특정 Agent만 답합니다.</p></div></article>
+          <article><span>3</span><div><b>Agent 성격 바꾸기</b><p>다음 화면 또는 오른쪽 Agent 카드에서 이름과 지시문을 직접 편집할 수 있습니다.</p></div></article>
+        </div>
+        <div className="demo-intro-tech"><b>간단한 기술 구조</b><p>WebSocket으로 Room 상태를 실시간 동기화하고, Agent마다 같은 대화 기록과 서로 다른 역할 지시를 Gemini 3.5 Flash-Lite에 전달합니다. 수정한 지시문도 다음 답변부터 즉시 반영됩니다.</p></div>
+        <div className="demo-intro-footer"><button className="demo-intro-skip" onClick={onClose}>기본값으로 바로 시작</button><button className="demo-intro-start" onClick={() => setPage(1)}>다음 · Agent 설정</button></div>
+      </> : <>
+        <button className="demo-setup-back" onClick={() => setPage(0)} disabled={pending}><ArrowLeft size={16} /> 이전</button>
+        <div className="demo-intro-kicker">OPTIONAL SETUP</div>
+        <h2 id="demo-intro-title">세 Agent를 원하는 방식으로 바꿔보세요</h2>
+        <p className="demo-intro-lead">모든 칸은 일부러 비워뒀습니다. <strong>비워두면 현재 기본값을 그대로 사용</strong>하고, 적은 항목만 이 Room에 덮어씁니다.</p>
+        <div className="demo-setup-grid">
+          {agents.map(agent => {
+            const draft = drafts[agent.id] || {};
+            return <article className="demo-setup-agent" key={agent.id}>
+              <header><span className="demo-agent-initial">{agent.initial}</span><div><b>{agent.name}</b><small>@{agent.id} · {agent.role}</small></div></header>
+              <label><span>프로필 이름 <small>{(draft.name || '').length}/40</small></span><input value={draft.name || ''} onChange={e => setField(agent.id, 'name', e.target.value)} maxLength={40} disabled={pending} placeholder={agent.name} /></label>
+              <label><span>지시문 <small>{(draft.instruction || '').length}/1200</small></span><textarea value={draft.instruction || ''} onChange={e => setField(agent.id, 'instruction', e.target.value)} maxLength={1200} rows={6} disabled={pending} placeholder={agent.instruction} /></label>
+            </article>;
+          })}
+        </div>
+        <PromptTip />
+        {saveError && <p className="demo-setup-error">{saveError}</p>}
+        <div className="demo-intro-footer"><button className="demo-intro-skip" onClick={onClose} disabled={pending}>전부 기본값으로 시작</button><button className="demo-intro-start" onClick={applyProfiles} disabled={pending || !connected}>{pending ? '설정 적용 중…' : connected ? '설정 적용하고 시작' : '서버 연결 중…'}</button></div>
+      </>}
     </section>
   </div>;
 }
 function App() {
-  const { room, draft, setDraft, connection, error, setError, pending, submit, retry, updateAgentProfile, cancel, reset } = useRoom();
+  const { room, draft, setDraft, connection, error, setError, pending, submit, retry, updateAgentProfile, updateAgentProfiles, cancel, reset } = useRoom();
   const [query, setQuery] = useState('');
   const [members, setMembers] = useState(true);
   const [selectedAgentId, setSelectedAgentId] = useState(null);
@@ -146,7 +188,7 @@ function App() {
         {selectedAgent ? <AgentProfileEditor agent={selectedAgent} disabled={!connected || busy} pending={pending} onBack={() => setSelectedAgentId(null)} onMention={() => appendMention(selectedAgent)} onSave={updateAgentProfile} /> : <><p className="mb-2 px-2 text-[11px] font-black uppercase tracking-wide text-text-muted">참가자 — 사람 1 · AI 역할 {room.agents.length}</p><section className="dc-person-member-group"><div className="flex items-center gap-2 px-2 py-2"><span className="grid h-8 w-8 place-items-center rounded-full bg-accent text-[10px] font-black text-white">YOU</span><span><strong className="block text-[12px]">Public Visitor</strong><small className="text-[10px] text-text-muted">{connected ? '브라우저 연결됨' : '연결 확인 중'}</small></span></div></section><section className="dc-person-member-group mt-3"><p className="dc-person-owner-label">Cloud API Agents</p><div className="dc-owner-agent-list">{room.agents.map(a => <button key={a.id} className="demo-member-button" onClick={() => setSelectedAgentId(a.id)} title={`${a.name} 프로필 보기/편집`}><span className="demo-agent-initial">{a.initial}</span><span className="min-w-0 flex-1"><strong className="block truncate text-[12px]">{a.name}</strong><small className="block truncate text-[10px] text-text-muted">{a.model || '모델 미설정'}</small><small className="block text-[10px] text-text-muted">{a.configured ? LABELS[a.state] : '설정 필요'}</small></span><span className="demo-agent-dot" data-state={!a.configured ? 'failed' : a.state} /></button>)}</div></section><p className="demo-runtime-note">Agent 카드를 누르면 현재 프로필 이름과 지시문을 확인하고 이 Room에서 편집할 수 있습니다.</p></>}
       </div></div></section></aside>}
     </div>
-    {showIntro && <IntroModal onClose={closeIntro} />}
+    {showIntro && <IntroModal agents={room.agents} connected={connected} pending={pending} onApply={updateAgentProfiles} onClose={closeIntro} />}
   </>;
 }
 createRoot(document.getElementById('root')).render(<App />);
