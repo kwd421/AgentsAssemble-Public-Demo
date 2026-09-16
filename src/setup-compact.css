@@ -1,0 +1,161 @@
+/* Desktop setup density: keep all three profiles and footer visible without scrolling. */
+@media (min-width: 851px) {
+  .aa-dialog.aa-dialog-setup {
+    width: min(1180px, calc(100vw - 36px));
+    max-height: calc(100dvh - 28px);
+  }
+  .aa-dialog.aa-dialog-setup .aa-dialog-inner {
+    height: min(720px, calc(100dvh - 28px));
+    max-height: calc(100dvh - 28px);
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-form {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+  }
+  .aa-dialog.aa-dialog-setup .aa-dialog-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: hidden !important;
+    padding: 16px 22px 10px;
+    scrollbar-gutter: auto;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-heading {
+    margin-bottom: 12px;
+    gap: 14px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-heading h2 {
+    font-size: 26px;
+    line-height: 1.2;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-heading .aa-dialog-description {
+    margin-top: 4px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .aa-dialog.aa-dialog-setup .aa-optional-label {
+    margin-top: 26px;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-grid {
+    gap: 12px;
+    align-items: stretch;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card .aa-profile-banner {
+    height: 44px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card .aa-banner-index {
+    top: 8px;
+    right: 12px;
+    font-size: 10px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card .aa-profile-title {
+    padding: 28px 13px 8px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card .aa-profile-title > .aa-avatar {
+    top: -23px;
+    left: 13px;
+    width: 44px;
+    height: 44px;
+    border-width: 4px;
+    font-size: 18px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card .aa-role-tag {
+    top: 8px;
+    right: 11px;
+    max-width: calc(100% - 78px);
+    font-size: 10px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card .aa-profile-title h3 {
+    margin-bottom: 0;
+    font-size: 17px;
+    line-height: 1.25;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card .aa-profile-handle {
+    font-size: 10px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card .aa-profile-fields {
+    padding: 4px 12px 10px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card .aa-field + .aa-field {
+    margin-top: 9px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card .aa-field-label {
+    margin-bottom: 4px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card .aa-field-label label {
+    font-size: 12px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card .aa-field-label > span {
+    font-size: 10px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card .aa-field input {
+    min-height: 36px;
+    padding: 7px 9px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card .aa-field textarea {
+    height: 92px;
+    min-height: 92px !important;
+    max-height: 92px;
+    resize: none;
+    padding: 8px 9px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-card .aa-field-hint {
+    display: none;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-notes {
+    margin-top: 10px;
+    padding-top: 8px;
+    gap: 12px;
+    align-items: center;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-notes > p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-notes > p svg {
+    margin-top: 0;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-notes .aa-writing-note {
+    max-width: 470px;
+    flex-basis: 470px;
+    font-size: 12px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-notes .aa-writing-note summary {
+    padding: 7px 0;
+  }
+  .aa-dialog.aa-dialog-setup .aa-setup-error,
+  .aa-dialog.aa-dialog-setup .aa-connection-note {
+    margin-top: 6px;
+    padding: 5px 0;
+    font-size: 12px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-dialog-footer {
+    min-height: 54px;
+    padding: 9px 18px;
+  }
+  .aa-dialog.aa-dialog-setup .aa-dialog-footer .aa-button {
+    min-height: 36px;
+    padding: 8px 13px;
+  }
+}
+
+/* Very short desktop windows may still scroll rather than clip controls. */
+@media (min-width: 851px) and (max-height: 620px) {
+  .aa-dialog.aa-dialog-setup .aa-dialog-scroll {
+    overflow-y: auto !important;
+  }
+}
