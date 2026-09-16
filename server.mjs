@@ -46,7 +46,7 @@ export function createDemoServer({ env = process.env, runner } = {}) {
     next();
   });
   app.use(express.json({ limit: '16kb' }));
-  app.get('/api/health', (_req, res) => res.json({ ok: true, version: '0.3.0', configured: config.fake || AGENTS.every(a => Boolean(config.apiKey && modelFor(a, env))), fakeMode: config.fake, runtime: config.fake ? 'fixture' : 'cloud-api', rustConnected: false, searchEnabled: false, transport: 'websocket', maxTokens: config.maxTokens, timeoutMs: config.timeoutMs, retries: config.retries }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, version: '0.4.0', configured: config.fake || AGENTS.every(a => Boolean(config.apiKey && modelFor(a, env))), fakeMode: config.fake, runtime: config.fake ? 'fixture' : 'cloud-api', rustConnected: false, searchEnabled: false, transport: 'websocket', maxTokens: config.maxTokens, timeoutMs: config.timeoutMs, retries: config.retries }));
   app.post('/api/rooms', (_req, res) => res.status(201).json(store.snapshot(store.create())));
   app.get('/api/rooms/:roomId', (req, res) => res.json(store.snapshot(store.get(req.params.roomId))));
   app.post('/api/rooms/:roomId/cancel', (req, res) => { store.stop(store.get(req.params.roomId)); res.json({ ok: true }); });
@@ -122,6 +122,11 @@ export function createDemoServer({ env = process.env, runner } = {}) {
         if (store.get(room.id) !== room) throw new Error('room expired');
         if (command.type === 'cancel') { store.stop(room); send(ws, 'cancel_requested', {}); return; }
         if (command.type === 'sync') { send(ws, 'snapshot', store.snapshot(room), room.seq); return; }
+        if (command.type === 'agent_profile_update') {
+          const result = store.updateAgentProfile(room, command);
+          if (result.duplicate) send(ws, 'snapshot', store.snapshot(room), room.seq);
+          return;
+        }
         const { duplicate, completion } = store.start(room, command);
         if (duplicate) send(ws, 'snapshot', store.snapshot(room), room.seq);
         completion.catch(() => send(ws, 'command_error', { code: 'server_error' }));
@@ -148,7 +153,7 @@ export function createDemoServer({ env = process.env, runner } = {}) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const runtime = createDemoServer();
   const port = Number(process.env.PORT || 3000);
-  runtime.server.listen(port, '0.0.0.0', () => console.log(JSON.stringify({ event: 'demo_started', version: '0.3.0', port, maxTokens: aiConfig().maxTokens, timeoutMs: aiConfig().timeoutMs, mode: aiConfig().fake ? 'fixture' : 'cloud-api', rustConnected: false })));
+  runtime.server.listen(port, '0.0.0.0', () => console.log(JSON.stringify({ event: 'demo_started', version: '0.4.0', port, maxTokens: aiConfig().maxTokens, timeoutMs: aiConfig().timeoutMs, mode: aiConfig().fake ? 'fixture' : 'cloud-api', rustConnected: false })));
   let stopping = false;
   const stop = () => { if (stopping) return; stopping = true; const timer = setTimeout(() => process.exit(1), 10000); timer.unref(); runtime.close().then(() => { clearTimeout(timer); process.exit(0); }); };
   process.once('SIGTERM', stop); process.once('SIGINT', stop);
