@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import Markdown from 'react-markdown';
-import { AtSign, BookOpen, ChevronDown, Hash, Home, Pencil, RefreshCw, Search, Send, Square, Users, X } from 'lucide-react';
+import { BookOpen, ChevronDown, Hash, Home, Pencil, RefreshCw, Search, Send, Square, Users, X } from 'lucide-react';
 import { useRoom } from './useRoom.js';
 import { AgentAvatar, AgentProfileEditor, IntroModal, RoomGuide } from './interface.jsx';
 import './index.css';
 import './demo.css';
 import './onboarding.css';
+import './composer-fix.css';
 
 const LABELS = { idle: '대기', queued: '차례 대기', running: '응답 생성 중', retrying: '재시도 중', failed: '응답 실패', done: '응답 완료', cancelled: '중지됨' };
 const INTRO_KEY = 'aa-demo-intro-v3';
@@ -79,7 +80,7 @@ function App() {
           {room.failures.map(f => <div className="demo-failure" role="status" key={f.id}><strong>{room.agents.find(a => a.id === f.agentId)?.name} 응답 실패</strong><p>{f.message}</p><small>{f.code}{f.traceId ? ` · 진단 ID ${f.traceId.slice(0, 8)}` : ''}</small>{f.canRetry && <RetryButton failure={f} disabled={busy || !connected} retry={retry} />}{f.manualRetries > 0 && <p>수동 재시도 1회를 사용했습니다.</p>}</div>)}
         </div>
         <div className="aa-composer-wrap shrink-0 px-4 pb-5"><div className="demo-composer-info"><span>{room.agents.some(a => a.state === 'queued') ? `${room.agents.filter(a => a.state === 'queued').map(a => a.name).join(' → ')} 차례 대기` : 'Enter 전송 · Shift+Enter 줄바꿈'}</span><span>{draft.length} / 2500</span></div>
-          <section className="dc-composer-shell"><div className="dc-composer-bar"><textarea ref={composerRef} value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={onKeyDown} className="dc-composer-input" placeholder={room.userTurns >= room.maxUserTurns ? '대화 횟수 제한에 도달했습니다.' : '#general에 메시지 보내기'} aria-label="채팅 입력" maxLength={2500} rows={1} disabled={room.userTurns >= room.maxUserTurns} /><button className="dc-composer-button" data-role="mention" onClick={() => setDraft(v => v + (v && !v.endsWith(' ') ? ' ' : '') + '@all ')} title="전체 멘션" aria-label="전체 멘션"><AtSign size={19} /></button>{busy ? <button className="dc-composer-button" onClick={cancel} disabled={!connected || pending} title="응답 중지" aria-label="응답 중지"><Square size={18} /></button> : <button className="dc-composer-button send" disabled={!connected || !draft.trim() || room.userTurns >= room.maxUserTurns} onClick={submit} aria-label="채팅 메시지 보내기"><Send size={18} /></button>}</div></section>
+          <section className="dc-composer-shell"><div className="dc-composer-bar"><textarea ref={composerRef} value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={onKeyDown} className="dc-composer-input" placeholder={room.userTurns >= room.maxUserTurns ? '대화 횟수 제한에 도달했습니다.' : '#general에 메시지 보내기'} aria-label="채팅 입력" maxLength={2500} rows={1} disabled={room.userTurns >= room.maxUserTurns} />{busy ? <button className="dc-composer-button" onClick={cancel} disabled={!connected || pending} title="응답 중지" aria-label="응답 중지"><Square size={18} /></button> : <button className="dc-composer-button send" disabled={!connected || !draft.trim() || room.userTurns >= room.maxUserTurns} onClick={submit} aria-label="채팅 메시지 보내기"><Send size={18} /></button>}</div></section>
           {room.userTurns >= room.maxUserTurns && <button className="demo-target-chip mt-2" disabled={busy} onClick={newRoom}>새 체험방 시작</button>}
         </div>
       </main>
