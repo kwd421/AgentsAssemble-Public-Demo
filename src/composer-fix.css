@@ -1,0 +1,19 @@
+/* Public demo composer: keep only the text area and send/stop action.
+   The pinned desktop styles reserve space for extra host actions that this demo does not use. */
+.aa-ui .dc-composer-bar {
+  display: flex !important;
+  align-items: flex-end !important;
+  gap: 0 !important;
+  width: 100% !important;
+  grid-template-columns: none !important;
+}
+
+.aa-ui .dc-composer-input {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+}
+
+.aa-ui .dc-composer-button {
+  flex: 0 0 auto !important;
+}
