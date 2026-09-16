@@ -22,7 +22,7 @@ function ProfileFields({ agent, name, instruction, onName, onInstruction, disabl
   const id = useId();
   return <div className="aa-profile-fields">
     <div className="aa-field"><div className="aa-field-label"><label htmlFor={`${id}-name`}>프로필 이름</label><span aria-hidden="true">{name.length} / 40</span></div><input id={`${id}-name`} autoComplete="off" value={name} onChange={e => onName(e.target.value)} maxLength={40} disabled={disabled} placeholder={setup ? agent.name : '예: 제품 기획자'} /></div>
-    <div className="aa-field"><div className="aa-field-label"><label htmlFor={`${id}-instruction`}>지시문</label><span aria-hidden="true">{instruction.length} / 1200</span></div><textarea id={`${id}-instruction`} value={instruction} onChange={e => onInstruction(e.target.value)} maxLength={1200} rows={7} disabled={disabled} aria-describedby={`${id}-hint`} placeholder={setup ? agent.instruction : INSTRUCTION_HINTS[agent.id] || '역할, 판단 기준, 답변 형식을 입력합니다.'} /><p id={`${id}-hint`} className="aa-field-hint">{setup ? '비워두면 현재 지시문을 사용합니다.' : '역할과 답변 형식, 우선할 기준을 적습니다.'}</p></div>
+    <div className="aa-field"><div className="aa-field-label"><label htmlFor={`${id}-instruction`}>지시문</label><span aria-hidden="true">{instruction.length} / 1200</span></div><textarea id={`${id}-instruction`} value={instruction} onChange={e => onInstruction(e.target.value)} maxLength={1200} rows={7} disabled={disabled} aria-describedby={`${id}-hint`} placeholder={setup ? agent.instruction : INSTRUCTION_HINTS[agent.id] || '역할, 판단 기준, 답변 형식을 입력합니다.'} /><p id={`${id}-hint`} className="aa-field-hint">{setup ? '비워두면 현재 지시문을 사용합니다. 말투·성격·간단한 캐릭터 설정도 적어도 됩니다.' : '역할뿐 아니라 말투·성격·간단한 캐릭터 설정도 적어도 됩니다.'}</p></div>
   </div>;
 }
 
@@ -110,7 +110,7 @@ export function IntroModal({ agents, connected, pending, onApply, onClose }) {
             <AgentBanner agent={agent} name={(draft.name || '').trim()} index={index} />
             <ProfileFields agent={agent} name={draft.name || ''} instruction={draft.instruction || ''} onName={value => setField(agent.id, 'name', value)} onInstruction={value => setField(agent.id, 'instruction', value)} disabled={locked || !connected} setup />
           </article>; })}</div> : <p className="aa-loading" role="status">에이전트 설정을 불러오는 중입니다.</p>}
-          <div className="aa-setup-notes"><p><Pencil size={16} />역할, 판단 기준, 답변 형식을 구체적으로 적으면 지시가 더 명확해집니다.</p></div>
+          <div className="aa-setup-notes"><p><Pencil size={16} />지시문에는 역할·판단 기준뿐 아니라 말투·성격·간단한 캐릭터 설정도 적어도 됩니다.</p></div>
           {saveError && <p className="aa-setup-error" role="alert">{saveError}</p>}
           {!connected && <p className="aa-connection-note" role="status">서버 연결을 기다리고 있습니다. 입력 내용은 유지됩니다.</p>}
         </div>
