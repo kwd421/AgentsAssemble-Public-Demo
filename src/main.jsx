@@ -50,7 +50,7 @@ function App() {
   useEffect(() => { if (!members) return; const onKey = e => { if (e.key === 'Escape' && !showIntro && window.innerWidth < 1100) setMembers(false); }; document.addEventListener('keydown', onKey); return () => document.removeEventListener('keydown', onKey); }, [members, showIntro]);
   const messages = room.messages.filter(m => !query || m.content.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   function onKeyDown(e) { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }
-  function appendMention(agent) { setDraft(v => `${v}${v && !v.endsWith(' ') ? ' ' : ''}@${agent.id} `); if (window.innerWidth < 1100) setMembers(false); requestAnimationFrame(() => composerRef.current?.focus()); }
+  function appendMention(agent) { setDraft(v => `${v}${v && !v.endsWith(' ') ? ' ' : ''}@${agent.mention || agent.id} `); if (window.innerWidth < 1100) setMembers(false); requestAnimationFrame(() => composerRef.current?.focus()); }
   function closeIntro() { try { sessionStorage.setItem(INTRO_KEY, 'seen'); } catch { /* Storage may be disabled. */ } setShowIntro(false); requestAnimationFrame(() => composerRef.current?.focus()); }
   function newRoom() { if (busy) return; setSelectedAgentId(null); reset(); }
   return <>
