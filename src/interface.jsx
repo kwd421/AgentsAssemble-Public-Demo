@@ -14,7 +14,7 @@ export function AgentAvatar({ agent, large = false, human = false }) {
 function AgentBanner({ agent, name, index, compact = false }) {
   return <div className={`aa-profile-identity${compact ? ' compact' : ''}`}>
     <div className="aa-profile-banner" aria-hidden="true"><span className="aa-banner-mark" /><span className="aa-banner-index">{index == null ? 'AI' : `0${index + 1}`}</span></div>
-    <div className="aa-profile-title"><AgentAvatar agent={agent} large /><span className="aa-role-tag">{agent.role || '역할 미설정'}</span><h3>{name || agent.name}</h3><span className="aa-profile-handle">@{agent.id}</span></div>
+    <div className="aa-profile-title"><AgentAvatar agent={agent} large /><span className="aa-role-tag">{agent.role || '역할 미설정'}</span><h3>{name || agent.name}</h3></div>
   </div>;
 }
 
@@ -47,7 +47,7 @@ export function AgentProfileEditor({ agent, disabled, pending, onBack, onMention
     <ProfileFields agent={agent} name={name} instruction={instruction} onName={setName} onInstruction={setInstruction} disabled={disabled} />
     <PromptTip compact />
     <p className="aa-profile-scope">저장한 설정은 이 방의 다음 응답부터 적용됩니다. 방이 만료되면 함께 삭제됩니다.</p>
-    <div className="aa-profile-actions"><button type="button" className="aa-button secondary" onClick={onMention} disabled={disabled} title={`@${agent.id} 입력`}><AtSign size={16} />멘션</button><button type="button" className="aa-button primary" disabled={disabled || invalid || !dirty} onClick={() => onSave(agent.id, cleanName, cleanInstruction)}><Save size={15} />{pending ? '저장 중…' : '변경 저장'}</button></div>
+    <div className="aa-profile-actions"><button type="button" className="aa-button secondary" onClick={onMention} disabled={disabled} title="이 에이전트 멘션 입력"><AtSign size={16} />멘션</button><button type="button" className="aa-button primary" disabled={disabled || invalid || !dirty} onClick={() => onSave(agent.id, cleanName, cleanInstruction)}><Save size={15} />{pending ? '저장 중…' : '변경 저장'}</button></div>
   </section>;
 }
 
@@ -55,7 +55,7 @@ export function RoomGuide({ onOpen }) {
   return <section className="aa-room-guide" aria-label="데모 사용 안내">
     <h3>이 방의 사용법</h3>
     <div className="aa-guide-item"><MessageSquare size={17} /><p>질문을 보내면 세 에이전트가 차례로 답합니다.</p></div>
-    <div className="aa-guide-item"><AtSign size={17} /><p><code>@engineer</code>를 붙이면 엔지니어만 답합니다.</p></div>
+    <div className="aa-guide-item"><AtSign size={17} /><p>멤버를 선택해 멘션하면 해당 에이전트만 답합니다.</p></div>
     <div className="aa-guide-item"><Pencil size={17} /><p>오른쪽 멤버를 누르면 이름과 지시문을 수정할 수 있습니다.</p></div>
     <button type="button" className="aa-guide-open" onClick={onOpen}><BookOpen size={16} />사용 안내 및 설정<ArrowRight size={15} /></button>
   </section>;
@@ -106,7 +106,7 @@ export function IntroModal({ agents, connected, pending, onApply, onClose }) {
       <header className="aa-dialog-bar"><span className="aa-room-address"><Hash size={17} />AgentsAssemble<span>/</span>general</span><div className="aa-dialog-stepper" aria-label={`설정 ${page + 1} / 2 단계`}><span data-current={page === 0}>01 안내</span><span className="aa-step-rule" /><span data-current={page === 1}>02 프로필</span></div><button type="button" className="aa-close-button" onClick={close} disabled={locked} aria-label="안내 닫기"><X size={20} /></button></header>
       {page === 0 ? <>
         <div className="aa-dialog-scroll aa-welcome" ref={scrollArea}>
-          <div className="aa-welcome-copy"><span className="aa-small-label">처음 오셨나요?</span><h2 id="aa-dialog-title" ref={title} tabIndex={-1}>대화 시작</h2><p id="aa-dialog-description" className="aa-dialog-description">한 방에서 세 에이전트의<br className="aa-desktop-break" /> 의견을 함께 확인합니다.</p><div className="aa-welcome-instructions"><p>질문을 보내면 세 에이전트가 순서대로 답합니다. 별도의 명령어는 필요하지 않습니다.</p><p>한 명만 부를 때는 <code>@engineer</code>처럼 멘션합니다. 이름과 지시문은 다음 화면이나 오른쪽 멤버 패널에서 수정할 수 있습니다.</p></div></div>
+          <div className="aa-welcome-copy"><span className="aa-small-label">처음 오셨나요?</span><h2 id="aa-dialog-title" ref={title} tabIndex={-1}>대화 시작</h2><p id="aa-dialog-description" className="aa-dialog-description">한 방에서 세 에이전트의<br className="aa-desktop-break" /> 의견을 함께 확인합니다.</p><div className="aa-welcome-instructions"><p>질문을 보내면 세 에이전트가 순서대로 답합니다. 별도의 명령어는 필요하지 않습니다.</p><p>한 명만 부를 때는 오른쪽 멤버 패널에서 해당 에이전트의 멘션 버튼을 사용합니다. 이름과 지시문도 같은 곳이나 다음 화면에서 수정할 수 있습니다.</p></div></div>
           <div className="aa-welcome-roster"><div className="aa-roster-heading">대화에 참여하는 에이전트<span>3</span></div>{['strategist', 'engineer', 'critic'].map((id, index) => { const agent = agents.find(a => a.id === id) || { id, name: '연결 중…', initial: id[0].toUpperCase(), role: '에이전트 정보를 불러오는 중' }; return <div className="aa-welcome-member" data-agent={id} key={id}><AgentAvatar agent={agent} /><div><strong>{agent.name}</strong><p>{agent.role || '역할 미설정'}</p></div><span className="aa-member-order">0{index + 1}</span></div>; })}<p className="aa-roster-note">각 에이전트는 앞선 답변을 읽고<br />자신의 역할에 따라 이어서 답합니다.</p></div>
           <details className="aa-technical-note"><summary>동작 방식<ChevronRight size={15} /></summary><p>서버가 대화 기록과 에이전트별 지시문을 AI 모델에 전달합니다. WebSocket 연결로 응답과 상태를 화면에 실시간 반영합니다. 이 공개 데모에는 웹 검색과 로컬 파일 접근 기능이 없습니다.</p></details>
         </div>
