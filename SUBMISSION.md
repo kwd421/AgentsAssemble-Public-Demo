@@ -22,21 +22,24 @@ AgentsAssemble는 사람과 여러 AI 에이전트를 동일한 Room의 참가�
 - 전략/엔지니어링/비평 세 역할의 AI 협업
 - 앞선 Agent 답변을 다음 Agent가 실제 shared context로 사용
 - 특정 Agent에게만 후속 질문
-- 순차적 응답 스트리밍
+- WebSocket 기반 실시간 Room 상태 및 순차 Agent 응답
+- 실패한 Agent만 문맥을 유지한 채 제한적으로 재시도
 
 ## 웹 데모의 의도적 제한
 
-실제품의 로컬 AI CLI 연결, OAuth, MCP, provider 관리, 로컬 파일 권한 기능은 공개 심사 URL에서 제외했습니다. 공개 웹 환경에서 제3자에게 로컬 컴퓨터 권한이나 개발자 계정 설정을 요구하지 않기 위한 제한입니다.
+실제품의 로컬 AI CLI 연결, OAuth, MCP, provider 관리, 로컬 파일 권한 기능은 공개 심사 URL에서 제외했습니다. 공개 웹 환경에서 제3자에게 로컬 컴퓨터 권한이나 개발자 계정 설정을 요구하지 않기 위한 제한입니다. 웹 데모는 별도의 Node.js Cloud API runtime이며 원본 Rust Room/CLI runtime을 그대로 호스팅한 버전은 아닙니다.
 
 ## 기술 구성
 
 - React + Vite frontend
 - Node/Express demo gateway
-- SSE 기반 순차 Agent 응답
+- `/api/live` WebSocket 기반 Room 이벤트 전달 및 재접속 snapshot 동기화
+- 구버전 탭 호환용 SSE endpoint 유지
 - OpenAI-compatible server-side AI API
 - 메모리-only 임시 Room
-- turn/input/rate 제한
+- turn/input/rate/concurrency 제한
 - API credential server-side only
+- 명시적 fixture 모드 외에는 실제 API 실패를 가짜 답변으로 대체하지 않음
 
 ## 권장 데모 시나리오
 
